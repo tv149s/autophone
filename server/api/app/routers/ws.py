@@ -93,6 +93,7 @@ async def _upsert_phones(device_id: str, phones: list):
             p.number = ph.get("number", "") or p.number
             p.wda_ready = bool(ph.get("wda_ready", False))
             p.locked = bool(ph.get("locked", False))
+            p.front_app = ph.get("front_app", "") or ""
             ch = ph.get("channels", []) or []
             ov = p.overrides or {}                 # 用户覆盖盖在边缘上报之上
             for c in ch:

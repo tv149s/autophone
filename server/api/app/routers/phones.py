@@ -15,8 +15,8 @@ def _view(p: Phone, device_name: str = "") -> dict:
     return {
         "id": p.id, "device_id": p.device_id, "device_name": device_name,
         "label": p.label, "platform": p.platform, "udid": p.udid, "number": p.number,
-        "wda_ready": p.wda_ready, "locked": p.locked, "auto_answer": p.auto_answer,
-        "channels": p.channels or [], "last_report": p.last_report,
+        "wda_ready": p.wda_ready, "locked": p.locked, "front_app": p.front_app,
+        "auto_answer": p.auto_answer, "channels": p.channels or [], "last_report": p.last_report,
     }
 
 

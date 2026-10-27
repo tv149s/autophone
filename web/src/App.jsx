@@ -475,6 +475,7 @@ function Devices() {
             <div className="row">
               <span className={"pill " + (p.wda_ready ? "on" : "off")}>{p.wda_ready ? "控制就绪" : "未就绪"}</span>
               <span className={"pill " + (p.locked ? "off" : "on")}>{p.locked ? "锁屏" : "亮屏"}</span>
+              {p.front_app && <span className="pill off">前台:{p.front_app}</span>}
               <button className="sec" onClick={() => toggleAuto(p)}>{p.auto_answer ? "自动接听:开" : "自动接听:关"}</button>
             </div>
           </div>
@@ -483,7 +484,7 @@ function Devices() {
             <tbody>
               {(p.channels || []).map((c) => (
                 <tr key={c.kind}>
-                  <td>{c.name || c.kind}</td>
+                  <td>{c.name || c.kind}{c.warn && <div className="err" style={{ fontSize: 12, marginTop: 2 }}>⚠️ {c.warn}</div>}</td>
                   <td>{c.answer ? <span className="pill on">接听</span> : <span className="muted">—</span>}</td>
                   <td>{c.outbound ? <span className="pill on">外呼</span> : <span className="muted">—</span>}</td>
                   <td><span className={"pill " + (c.status === "supported" ? "on" : "off")}>{{ supported: "已测通", testing: "测试中", untested: "未测", unsupported: "不支持" }[c.status] || c.status}</span></td>

@@ -45,12 +45,16 @@ IPHONE_UDID = os.environ.get("EDGE_IPHONE_UDID", "00008110-000E61682EE2401E")
 IPHONE_NUMBER = os.environ.get("EDGE_IPHONE_NUMBER", "+14255480368")
 
 
+WECHAT_BUNDLE = "com.tencent.xin"
+
+
 def gather_phone_info() -> list:
-    """汇总本边缘端控制的 iPhone:锁屏/就绪状态(经 callctl,不直接碰 WDA)+ 渠道能力。"""
-    locked, wda_ready = False, False
+    """汇总本边缘端控制的 iPhone:锁屏/就绪/前台应用(经 callctl,不直接碰 WDA)+ 渠道能力与动态警告。"""
+    locked, wda_ready, front_app = False, False, None
     try:
         r = json.load(urllib.request.urlopen(CTL_STATUS, timeout=4))
         locked = bool(r.get("locked"))
+        front_app = r.get("front_app")
         age = r.get("syslog_age_s")
         wda_ready = age is not None and age < 60      # callctl 在实时读 syslog = 控制链路通
     except Exception:
@@ -59,18 +63,23 @@ def gather_phone_info() -> list:
     try:
         for c in json.load(open(CHANNELS_JSON)).get("channels", []):
             supported = c.get("status") == "supported"
+            warn = ""
+            if c.get("bundle") == WECHAT_BUNDLE and front_app == WECHAT_BUNDLE:
+                warn = "微信正在前台,此时来电不走系统界面,可能漏接(请回到主屏幕)"
             channels.append({
                 "kind": c.get("id"), "name": c.get("name"), "status": c.get("status"),
                 "enabled": bool(c.get("enabled")),
                 "answer": supported,                                   # 可接听
                 "outbound": supported and c.get("kind") == "cellular",  # 外呼目前仅蜂窝电话
+                "warn": warn,
             })
     except Exception:
         pass
+    front_label = {WECHAT_BUNDLE: "微信", "com.apple.springboard": "主屏幕"}.get(front_app, front_app or "")
     return [{
         "pkey": "iphone-13", "label": "iPhone 13", "platform": "ios",
         "udid": IPHONE_UDID, "number": IPHONE_NUMBER,
-        "wda_ready": wda_ready, "locked": locked, "channels": channels,
+        "wda_ready": wda_ready, "locked": locked, "front_app": front_label, "channels": channels,
     }]
 
 
@@ -82,9 +91,20 @@ async def send_phone_info(ws):
 
 
 async def report_phones(ws):
+    """每 5 秒探测一次,状态有变化就立即上报(锁屏/亮屏、前台应用等动态跟随);最多 30 秒心跳一次。"""
+    last_sig, since = None, 0
     while True:
-        await send_phone_info(ws)
-        await asyncio.sleep(30)
+        info = gather_phone_info()
+        sig = json.dumps(info, ensure_ascii=False, sort_keys=True)
+        if sig != last_sig or since >= 6:
+            try:
+                await ws.send(json.dumps({"type": "phone_info", "phones": info}))
+            except Exception:
+                return
+            last_sig, since = sig, 0
+        else:
+            since += 1
+        await asyncio.sleep(5)
 
 
 def apply_channel_config(cfg: dict) -> bool:

@@ -57,6 +57,7 @@ class Phone(Base):
     number: Mapped[str] = mapped_column(String(32), default="")
     wda_ready: Mapped[bool] = mapped_column(Boolean, default=False)
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    front_app: Mapped[str] = mapped_column(String(64), default="")   # 当前前台应用(动态)
     auto_answer: Mapped[bool] = mapped_column(Boolean, default=True)
     channels: Mapped[list] = mapped_column(JSON, default=list)     # [{kind,name,status,enabled,answer,outbound}]
     overrides: Mapped[dict] = mapped_column(JSON, default=dict)    # 用户覆盖 {kind:{enabled,asr,reply_language}},不被边缘上报冲掉
