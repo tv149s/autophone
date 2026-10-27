@@ -87,5 +87,6 @@ async def edge_ws(ws: WebSocket, token: str = ""):
     except Exception:
         pass
     finally:
-        await hub.disconnect(device_id, ws)
-        await _mark(device_id, False)
+        # 只有当移除的是当前连接(未被更新的重连替换)才标离线,避免重连竞态
+        if await hub.disconnect(device_id, ws):
+            await _mark(device_id, False)

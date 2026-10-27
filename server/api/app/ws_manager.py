@@ -22,10 +22,14 @@ class Hub:
             except Exception:
                 pass
 
-    async def disconnect(self, device_id: str, ws: WebSocket) -> None:
+    async def disconnect(self, device_id: str, ws: WebSocket) -> bool:
+        """移除连接。返回 True 表示移除的确实是当前连接(未被新连接替换),
+        调用方据此决定是否把设备标记为离线,避免重连竞态把在线覆盖成离线。"""
         async with self._lock:
             if self._conns.get(device_id) is ws:
                 self._conns.pop(device_id, None)
+                return True
+        return False
 
     def is_online(self, device_id: str) -> bool:
         return device_id in self._conns
