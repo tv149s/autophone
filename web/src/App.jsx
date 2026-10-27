@@ -269,6 +269,15 @@ function Contacts() {
       resetForm(); load();
     } catch (x) { alert(x.message); } finally { setBusy(false); }
   };
+  // 选专属身份即时保存(编辑已有联系人时),不用再找保存按钮
+  const onSoulChange = async (e) => {
+    const soul_id = e.target.value;
+    setForm({ ...form, soul_id });
+    if (editId) {
+      try { await api.updateContact(editId, { ...form, soul_id: soul_id || null }); setMsg("专属身份已保存"); load(); }
+      catch (x) { alert(x.message); }
+    }
+  };
   const newDedicatedSoul = async () => {
     const base = form.name || "联系人";
     const s = await api.createSoul({
@@ -278,7 +287,10 @@ function Contacts() {
     });
     setSouls(await api.listSouls());
     setForm({ ...form, soul_id: s.id });
-    alert(`已新建专属身份「${s.name}」并选中。可到「身份」页细化它的描述。`);
+    if (editId) {
+      try { await api.updateContact(editId, { ...form, soul_id: s.id }); setMsg("专属身份已创建并保存"); load(); } catch (x) { alert(x.message); }
+    }
+    alert(`已新建专属身份「${s.name}」${editId ? "并保存到该联系人" : "并选中"}。可到「身份」页细化它的描述。`);
   };
   const edit = async (c) => {
     setEditId(c.id); setForm({ ...EMPTY_C, ...c, birthday: c.birthday || "", soul_id: c.soul_id || "" });
@@ -320,9 +332,9 @@ function Contacts() {
         </div>
         <label>喜好</label><input value={form.preferences} onChange={set("preferences")} placeholder="喜欢靠窗、不吃辣…" />
         <label>备注</label><textarea value={form.notes} onChange={set("notes")} />
-        <label>专属身份(来电时用这个 Soul 接听;不选则用默认接线员)</label>
+        <label>专属身份(来电时用这个 Soul 接听;不选则用默认接线员){editId && <span className="muted"> · 选择即自动保存</span>}</label>
         <div className="row">
-          <select style={{ flex: 1 }} value={form.soul_id || ""} onChange={set("soul_id")}>
+          <select style={{ flex: 1 }} value={form.soul_id || ""} onChange={onSoulChange}>
             <option value="">(默认接线员)</option>
             {souls.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
