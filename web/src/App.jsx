@@ -463,6 +463,18 @@ function Tasks() {
   const [goal, setGoal] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // 设备加载后默认选中:上次用的(若仍在) → 否则第一个在线 → 否则第一个
+  useEffect(() => {
+    if (!devices || deviceId) return;
+    const last = localStorage.getItem("ap_last_device");
+    const pick = (last && devices.find((d) => d.id === last)) ||
+                 devices.find((d) => d.online) || devices[0];
+    if (pick) setDeviceId(pick.id);
+    // eslint-disable-next-line
+  }, [devices]);
+
+  const chooseDevice = (e) => { setDeviceId(e.target.value); if (e.target.value) localStorage.setItem("ap_last_device", e.target.value); };
+
   const add = async () => {
     setBusy(true);
     try {
@@ -475,12 +487,12 @@ function Tasks() {
     <div>
       <div className="card">
         <h2>下达外呼任务</h2>
-        <label>目标电话(E.164,如 +14255550123)</label>
-        <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="+1..." />
+        <label>目标电话(E.164 格式,如 +14255550123)</label>
+        <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="填写目标电话号码" />
         <label>任务目标</label>
-        <textarea value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="例如:打给金龙饭店,订明晚 7 点两人桌" />
+        <textarea value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="描述要办的事" />
         <label>指派设备</label>
-        <select value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
+        <select value={deviceId} onChange={chooseDevice}>
           <option value="">(不指定)</option>
           {(devices || []).map((d) => <option key={d.id} value={d.id}>{d.name || d.id} {d.online ? "· 在线" : "· 离线"}</option>)}
         </select>
