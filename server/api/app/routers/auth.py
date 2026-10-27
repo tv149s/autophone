@@ -7,6 +7,7 @@ from ..auth import (
     decode_token, hash_password, make_token, new_totp_secret,
     totp_uri, verify_password, verify_totp,
 )
+from ..config import settings
 from ..db import get_db
 from ..models import User
 
@@ -31,6 +32,39 @@ class EnableIn(BaseModel):
 
 class CodeIn(BaseModel):
     code: str
+
+
+class GoogleIn(BaseModel):
+    credential: str   # Google Identity Services 返回的 ID token
+
+
+@router.post("/google")
+async def google_login(body: GoogleIn, db: AsyncSession = Depends(get_db)):
+    if not settings.google_client_id:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "服务端未配置 Google 登录")
+    # 延迟导入,避免未配置时的额外依赖开销
+    from google.auth.transport import requests as g_requests
+    from google.oauth2 import id_token as g_id_token
+    try:
+        info = g_id_token.verify_oauth2_token(
+            body.credential, g_requests.Request(), settings.google_client_id
+        )
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Google 令牌无效")
+    if not info.get("email_verified"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Google 邮箱未验证")
+    email = info["email"].lower()
+    sub = info.get("sub")
+    user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if user is None:
+        user = User(email=email, provider="google", google_sub=sub)
+        db.add(user)
+        await db.commit()
+    elif not user.google_sub:
+        user.google_sub = sub          # 已有邮箱账号首次用 Google 登录 → 关联
+        await db.commit()
+    # Google 已完成强认证,直接发正式令牌
+    return {"access_token": make_token(user.id, {"mfa_ok": True}), "token_type": "bearer"}
 
 
 @router.post("/register")
@@ -63,6 +97,8 @@ async def enable_2fa(body: EnableIn, db: AsyncSession = Depends(get_db)):
 @router.post("/login")
 async def login(body: LoginIn, db: AsyncSession = Depends(get_db)):
     user = (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
+    if user and not user.password_hash:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该账号用 Google 登录,请点「用 Google 登录」")
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "邮箱或密码错误")
     if not user.totp_enabled:

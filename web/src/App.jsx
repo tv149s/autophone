@@ -1,10 +1,42 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api, setToken, hasToken } from "./api.js";
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
 export default function App() {
   const [authed, setAuthed] = useState(hasToken());
   if (!authed) return <Auth onLogin={() => setAuthed(true)} />;
   return <Dashboard onLogout={() => { setToken(""); setAuthed(false); }} />;
+}
+
+/* Google Identity Services 登录按钮 */
+function GoogleButton({ onToken, onError }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    const render = () => {
+      if (!window.google?.accounts?.id) return;
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (resp) => onToken(resp.credential),
+      });
+      if (ref.current) {
+        window.google.accounts.id.renderButton(ref.current, {
+          theme: "filled_blue", size: "large", width: 320, text: "continue_with",
+        });
+      }
+    };
+    if (window.google?.accounts?.id) { render(); return; }
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true; s.defer = true;
+    s.onload = render;
+    s.onerror = () => onError?.("无法加载 Google 登录脚本");
+    document.head.appendChild(s);
+  }, []);
+  if (!GOOGLE_CLIENT_ID)
+    return <div className="muted" style={{ fontSize: 13 }}>Google 登录未配置(缺 Client ID)</div>;
+  return <div ref={ref} style={{ display: "flex", justifyContent: "center" }} />;
 }
 
 /* ---------------- 登录 / 注册 / 2FA ---------------- */
@@ -18,6 +50,15 @@ function Auth({ onLogin }) {
   const [enroll, setEnroll] = useState(null); // {totp_secret, totp_uri}
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showEmail, setShowEmail] = useState(false);
+
+  const doGoogle = async (credential) => {
+    setErr("");
+    try {
+      const r = await api.googleLogin(credential);
+      setToken(r.access_token); onLogin();
+    } catch (x) { setErr(x.message); }
+  };
 
   const run = (fn) => async (e) => {
     e?.preventDefault();
@@ -46,7 +87,17 @@ function Auth({ onLogin }) {
     <div className="center">
       <h1>AutoPhoneAgent 控制台</h1>
       {stage === "creds" && (
-        <form className="card" onSubmit={mode === "login" ? doLogin : doRegister}>
+        <div className="card">
+          <p className="muted" style={{ marginTop: 0 }}>推荐用 Google 账户登录</p>
+          <GoogleButton onToken={doGoogle} onError={setErr} />
+          <div style={{ textAlign: "center", margin: "16px 0 4px" }}>
+            <a href="#" onClick={(e) => { e.preventDefault(); setShowEmail(!showEmail); setErr(""); }}>
+              {showEmail ? "收起邮箱登录" : "用邮箱登录 / 注册"}
+            </a>
+          </div>
+          {err && !showEmail && <div className="err">{err}</div>}
+          {showEmail && (
+        <form onSubmit={mode === "login" ? doLogin : doRegister}>
           <div className="tabs">
             <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setErr(""); }}>登录</button>
             <button type="button" className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setErr(""); }}>注册</button>
@@ -60,6 +111,8 @@ function Auth({ onLogin }) {
           </div>
           {err && <div className="err">{err}</div>}
         </form>
+          )}
+        </div>
       )}
       {stage === "mfa" && (
         <form className="card" onSubmit={doVerify}>

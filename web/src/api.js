@@ -39,6 +39,7 @@ export const api = {
   enable2fa: (email, password, code) =>
     req("/auth/2fa/enable", { method: "POST", body: { email, password, code } }),
   login: (email, password) => req("/auth/login", { method: "POST", body: { email, password } }),
+  googleLogin: (credential) => req("/auth/google", { method: "POST", body: { credential } }),
   verify2fa: (mfaToken, code) =>
     req("/auth/2fa/verify", { method: "POST", body: { code }, bearer: mfaToken }),
 

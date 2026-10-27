@@ -22,7 +22,9 @@ class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255))
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)   # Google 用户无密码
+    provider: Mapped[str] = mapped_column(String(32), default="password")           # password | google
+    google_sub: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     plan: Mapped[str] = mapped_column(String(32), default="free")

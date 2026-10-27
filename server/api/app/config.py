@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     jwt_alg: str = "HS256"
     access_token_minutes: int = 60 * 12
     app_base_url: str = "https://app.autophoneagent.com"
+    google_client_id: str = ""      # Google 网页 OAuth 客户端 ID(ID-token 校验用 audience)
     env: str = "prod"
 
     class Config:
