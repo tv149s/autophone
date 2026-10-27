@@ -383,8 +383,8 @@ function Contacts() {
           <tbody>
             {list.map((c) => (
               <tr key={c.id}>
-                <td>{c.title && <span className="muted">{c.title} </span>}{c.name || <span className="muted">(无名)</span>}</td>
-                <td className="mono">{c.phone || <span className="muted">—</span>}</td>
+                <td>{c.title && <span className="muted">{c.title} </span>}{c.name || <span className="muted">(无名)</span>}{c.channel && <span className="pill off" style={{ marginLeft: 6 }}>{{ wechat: "微信", telegram: "Telegram", qq: "QQ" }[c.channel] || c.channel}</span>}</td>
+                <td className="mono">{c.phone || <span className="muted">{c.channel ? "App 联系人" : "—"}</span>}</td>
                 <td>{c.relationship ? <span className="pill off">{relLabel(c.relationship)}</span> : <span className="muted">—</span>}</td>
                 <td>{c.soul_id ? <span className="pill on">{soulName(c.soul_id) || "已设"}</span> : <span className="muted">默认</span>}</td>
                 <td className="muted">{c.birthday || "—"}</td>

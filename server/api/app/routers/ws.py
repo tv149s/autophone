@@ -63,10 +63,10 @@ async def _sync_bundle(device_id: str) -> dict:
                 by_contact[m.contact_id].append(m.summary)
         return {
             "contacts": [{
-                "phone": c.phone, "name": c.name, "title": c.title, "relationship": c.relationship,
-                "birthday": c.birthday, "preferences": c.preferences, "notes": c.notes,
-                "org": c.org, "soul_id": c.soul_id, "memories": by_contact.get(c.id, []),
-            } for c in contacts if c.phone],
+                "phone": c.phone, "name": c.name, "channel": c.channel, "title": c.title,
+                "relationship": c.relationship, "birthday": c.birthday, "preferences": c.preferences,
+                "notes": c.notes, "org": c.org, "soul_id": c.soul_id, "memories": by_contact.get(c.id, []),
+            } for c in contacts if c.phone or c.name],
             "souls": [{"id": s.id, "name": s.name, "body": s.body, "meta": s.meta or {}} for s in souls],
         }
 
@@ -106,23 +106,33 @@ async def _upsert_phones(device_id: str, phones: list):
 
 
 async def _save_memory(device_id: str, msg: dict):
-    """通话后把本次要点写进对应联系人的记忆时间线;陌生号码则自动建一个最小联系人。"""
+    """通话后把要点写进对应联系人的记忆时间线;陌生来电自动建最小联系人(越用越全)。
+    电话按归一化号码匹配;微信等 App 来电按 (渠道, 名字) 匹配。"""
     from ..models import Contact, ContactMemory
     from ..phoneutil import normalize
-    phone = normalize(msg.get("phone", ""))
+    channel = (msg.get("channel") or "").strip()
+    name = (msg.get("name") or "").strip()
     summary = (msg.get("summary") or "").strip()
-    if not phone or not summary:
+    phone = normalize(msg.get("phone", "")) if channel in ("", "cellular") else ""
+    if not summary:
         return
     async with SessionLocal() as db:
         d = await db.get(Device, device_id)
         if not d:
             return
-        c = (await db.execute(
-            select(Contact).where(Contact.user_id == d.user_id, Contact.phone == phone)
-        )).scalar_one_or_none()
-        if c is None:                       # 陌生号码:自动建最小联系人(越用越全)
+        c = None
+        if phone:
+            c = (await db.execute(select(Contact).where(
+                Contact.user_id == d.user_id, Contact.phone == phone))).scalar_one_or_none()
+        elif channel and name:              # App 来电:按 (渠道,名字) 认人
+            c = (await db.execute(select(Contact).where(
+                Contact.user_id == d.user_id, Contact.channel == channel,
+                Contact.name == name))).scalar_one_or_none()
+        else:
+            return
+        if c is None:                       # 自动建最小联系人
             c = Contact(user_id=d.user_id, phone=phone, phone_raw=msg.get("phone", ""),
-                        name=msg.get("name", ""), source="call")
+                        name=name, channel=channel if phone == "" else "", source="call")
             db.add(c)
             await db.flush()
         db.add(ContactMemory(user_id=d.user_id, contact_id=c.id,

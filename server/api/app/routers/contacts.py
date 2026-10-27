@@ -18,6 +18,7 @@ router = APIRouter(prefix="/contacts", tags=["contacts"])
 class ContactIn(BaseModel):
     name: str = ""
     phone: str = ""
+    channel: str = ""
     title: str = ""
     relationship: str = ""
     birthday: str | None = None
@@ -36,7 +37,7 @@ class ImportIn(BaseModel):
 
 def _view(c: Contact) -> dict:
     return {
-        "id": c.id, "name": c.name, "phone": c.phone, "phone_raw": c.phone_raw,
+        "id": c.id, "name": c.name, "phone": c.phone, "phone_raw": c.phone_raw, "channel": c.channel,
         "title": c.title, "relationship": c.relationship, "birthday": c.birthday,
         "age_range": c.age_range, "preferences": c.preferences, "notes": c.notes,
         "org": c.org, "tags": c.tags or [], "soul_id": c.soul_id, "source": c.source,

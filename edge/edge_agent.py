@@ -372,18 +372,26 @@ async def watch_calls(ws):
             if rec:
                 summary = (rec.get("summary") or "").strip()
                 raw = str(rec.get("number_raw") or rec.get("number") or "")
-                # 解析到联系人的规范号码:缓存里按姓名或号码找
-                phone = ""
-                if raw in cache.get("by_name", {}):
-                    phone = cache["by_name"][raw].get("phone", "")
-                if not phone and any(ch.isdigit() for ch in raw):
-                    phone = raw            # 看着像号码,交给服务器归一化
-                if summary and phone:
+                channel = rec.get("channel") or ""
+                msg = None
+                if channel in ("", "cellular"):
+                    # 电话:解析规范号码(缓存按姓名/号码找)
+                    phone = ""
+                    if raw in cache.get("by_name", {}):
+                        phone = cache["by_name"][raw].get("phone", "")
+                    if not phone and any(ch.isdigit() for ch in raw):
+                        phone = raw
+                    if summary and phone:
+                        msg = {"type": "call_memory", "phone": phone, "name": raw,
+                               "channel": "cellular", "summary": summary, "call_id": base}
+                elif summary and raw and raw != "微信来电":
+                    # App 来电(微信等):按渠道+名字归档,自动建/更新该渠道联系人
+                    msg = {"type": "call_memory", "phone": "", "name": raw,
+                           "channel": channel, "summary": summary, "call_id": base}
+                if msg:
                     try:
-                        await ws.send(json.dumps({"type": "call_memory", "phone": phone,
-                                                  "name": rec.get("number_raw", ""), "summary": summary,
-                                                  "call_id": base}))
-                        log(f"通话记忆已归档 → {phone}")
+                        await ws.send(json.dumps(msg))
+                        log(f"通话记忆已归档 → {msg.get('name') or msg.get('phone')} ({channel or 'cellular'})")
                     except Exception:
                         pass
             json.dump(list(reported)[-500:], open(MEM_REPORTED, "w"))

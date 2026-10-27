@@ -116,8 +116,9 @@ class Contact(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(128), default="")
-    phone: Mapped[str] = mapped_column(String(32), index=True, default="")      # E.164 归一化
+    phone: Mapped[str] = mapped_column(String(32), index=True, default="")      # E.164 归一化(App联系人可空)
     phone_raw: Mapped[str] = mapped_column(String(64), default="")
+    channel: Mapped[str] = mapped_column(String(16), default="", index=True)    # ""=电话 / wechat / telegram / qq …
     title: Mapped[str] = mapped_column(String(16), default="")                  # 先生/女士/Dr…
     relationship: Mapped[str] = mapped_column(String(32), default="")           # friend/colleague/customer/family/vendor/org/other
     birthday: Mapped[str | None] = mapped_column(String(16), nullable=True)     # YYYY-MM-DD 或 MM-DD
