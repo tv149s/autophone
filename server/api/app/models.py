@@ -45,6 +45,24 @@ class Device(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class Phone(Base):
+    __tablename__ = "phones"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"), index=True)  # 控制它的边缘端
+    pkey: Mapped[str] = mapped_column(String(64), default="")      # 边缘端给这台电话的稳定标识
+    label: Mapped[str] = mapped_column(String(128), default="")
+    platform: Mapped[str] = mapped_column(String(16), default="ios")   # ios | android
+    udid: Mapped[str] = mapped_column(String(128), default="")
+    number: Mapped[str] = mapped_column(String(32), default="")
+    wda_ready: Mapped[bool] = mapped_column(Boolean, default=False)
+    locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    auto_answer: Mapped[bool] = mapped_column(Boolean, default=True)
+    channels: Mapped[list] = mapped_column(JSON, default=list)     # [{kind,name,status,enabled,answer,outbound}]
+    last_report: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class Channel(Base):
     __tablename__ = "channels"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)

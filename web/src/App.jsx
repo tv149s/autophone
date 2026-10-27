@@ -404,12 +404,19 @@ function Contacts() {
 
 function Devices() {
   const [devices, err, reload] = useAsync(() => api.listDevices());
+  const [phones, setPhones] = useState([]);
+  const loadPhones = () => api.listPhones().then(setPhones).catch(() => {});
   // 自动刷新:在设备上登录客户端后会自动出现,无需手动创建
   useEffect(() => {
-    const t = setInterval(reload, 5000);
+    loadPhones();
+    const t = setInterval(() => { reload(); loadPhones(); }, 5000);
     return () => clearInterval(t);
     // eslint-disable-next-line
   }, []);
+
+  const toggleAuto = async (p) => {
+    try { await api.setPhoneAutoAnswer(p.id, !p.auto_answer); loadPhones(); } catch (x) { alert(x.message); }
+  };
 
   const del = async (id) => {
     if (!confirm("移除该设备?移除后它将无法接任务,需在该设备上重新登录客户端。")) return;
@@ -451,6 +458,39 @@ function Devices() {
           </tbody>
         </table>
       </div>
+
+      <h2>电话</h2>
+      {phones.length === 0 && <div className="card"><span className="muted">边缘端上线后会自动上报它控制的电话(约 30 秒内出现)。</span></div>}
+      {phones.map((p) => (
+        <div className="card" key={p.id}>
+          <div className="spread">
+            <div>
+              <b>{p.label || "电话"}</b>
+              <span className="muted" style={{ marginLeft: 8 }}>{p.number} · {p.platform}</span>
+              <span className="muted" style={{ marginLeft: 8 }}>由 <b style={{ color: "var(--text)" }}>{p.device_name || "?"}</b> 控制</span>
+            </div>
+            <div className="row">
+              <span className={"pill " + (p.wda_ready ? "on" : "off")}>{p.wda_ready ? "控制就绪" : "未就绪"}</span>
+              <span className={"pill " + (p.locked ? "off" : "on")}>{p.locked ? "锁屏" : "亮屏"}</span>
+              <button className="sec" onClick={() => toggleAuto(p)}>{p.auto_answer ? "自动接听:开" : "自动接听:关"}</button>
+            </div>
+          </div>
+          <table style={{ marginTop: 10 }}>
+            <thead><tr><th>应用/渠道</th><th>可接听</th><th>可外呼</th><th>状态</th></tr></thead>
+            <tbody>
+              {(p.channels || []).map((c) => (
+                <tr key={c.kind}>
+                  <td>{c.name || c.kind}</td>
+                  <td>{c.answer ? <span className="pill on">接听</span> : <span className="muted">—</span>}</td>
+                  <td>{c.outbound ? <span className="pill on">外呼</span> : <span className="muted">—</span>}</td>
+                  <td><span className={"pill " + (c.status === "supported" ? "on" : "off")}>{{ supported: "已测通", testing: "测试中", untested: "未测", unsupported: "不支持" }[c.status] || c.status}</span></td>
+                </tr>
+              ))}
+              {(p.channels || []).length === 0 && <tr><td colSpan={4} className="muted">无渠道信息</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      ))}
     </div>
   );
 }

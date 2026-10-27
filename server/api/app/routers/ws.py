@@ -71,6 +71,33 @@ async def _sync_bundle(device_id: str) -> dict:
         }
 
 
+async def _upsert_phones(device_id: str, phones: list):
+    """边缘端上报它控制的电话(状态+渠道),按 (device, pkey) upsert。"""
+    from ..models import Phone
+    from datetime import datetime, timezone
+    async with SessionLocal() as db:
+        d = await db.get(Device, device_id)
+        if not d:
+            return
+        for ph in phones or []:
+            pkey = ph.get("pkey") or ph.get("udid") or ph.get("label") or "phone"
+            p = (await db.execute(
+                select(Phone).where(Phone.device_id == device_id, Phone.pkey == pkey)
+            )).scalar_one_or_none()
+            if p is None:
+                p = Phone(user_id=d.user_id, device_id=device_id, pkey=pkey)
+                db.add(p)
+            p.label = ph.get("label", p.label or pkey)
+            p.platform = ph.get("platform", "ios")
+            p.udid = ph.get("udid", "") or p.udid
+            p.number = ph.get("number", "") or p.number
+            p.wda_ready = bool(ph.get("wda_ready", False))
+            p.locked = bool(ph.get("locked", False))
+            p.channels = ph.get("channels", []) or []
+            p.last_report = datetime.now(timezone.utc)
+        await db.commit()
+
+
 async def _save_memory(device_id: str, msg: dict):
     """通话后把本次要点写进对应联系人的记忆时间线;陌生号码则自动建一个最小联系人。"""
     from ..models import Contact, ContactMemory
@@ -155,6 +182,8 @@ async def edge_ws(ws: WebSocket, token: str = ""):
                 await ws.send_json({"type": "sync", **await _sync_bundle(device_id)})
             elif kind == "call_memory":
                 await _save_memory(device_id, msg)
+            elif kind == "phone_info":
+                await _upsert_phones(device_id, msg.get("phones", []))
             elif kind == "status":
                 await _mark(device_id, True)
     except WebSocketDisconnect:

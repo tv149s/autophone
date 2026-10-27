@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import init_models
-from .routers import auth, contacts, devices, souls, tasks, ws
+from .routers import auth, contacts, devices, phones, souls, tasks, ws
 
 
 @asynccontextmanager
@@ -30,6 +30,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(devices.router)
+app.include_router(phones.router)
 app.include_router(contacts.router)
 app.include_router(souls.router)
 app.include_router(tasks.router)

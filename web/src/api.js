@@ -46,6 +46,8 @@ export const api = {
   listDevices: () => req("/devices", { auth: true }),
   renameDevice: (id, name) => req(`/devices/${id}`, { method: "PATCH", auth: true, body: { name } }),
   deleteDevice: (id) => req(`/devices/${id}`, { method: "DELETE", auth: true }),
+  listPhones: () => req("/phones", { auth: true }),
+  setPhoneAutoAnswer: (id, auto_answer) => req(`/phones/${id}`, { method: "PATCH", auth: true, body: { auto_answer } }),
 
   listSouls: () => req("/souls", { auth: true }),
   createSoul: (data) => req("/souls", { method: "POST", auth: true, body: data }),

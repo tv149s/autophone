@@ -39,6 +39,48 @@ CONTACTS_FLAG = f"{HERE}/.contacts_synced"
 CACHE = f"{HERE}/contacts_cache.json"           # duplex 来电匹配读这个
 MEM_REPORTED = f"{HERE}/.edge_mem_reported.json"
 CALLS = f"{HERE}/calls"
+CHANNELS_JSON = f"{HERE}/channels.json"
+CTL_STATUS = "http://127.0.0.1:8766/status"
+IPHONE_UDID = os.environ.get("EDGE_IPHONE_UDID", "00008110-000E61682EE2401E")
+IPHONE_NUMBER = os.environ.get("EDGE_IPHONE_NUMBER", "+14255480368")
+
+
+def gather_phone_info() -> list:
+    """汇总本边缘端控制的 iPhone:锁屏/就绪状态(经 callctl,不直接碰 WDA)+ 渠道能力。"""
+    locked, wda_ready = False, False
+    try:
+        r = json.load(urllib.request.urlopen(CTL_STATUS, timeout=4))
+        locked = bool(r.get("locked"))
+        age = r.get("syslog_age_s")
+        wda_ready = age is not None and age < 60      # callctl 在实时读 syslog = 控制链路通
+    except Exception:
+        pass
+    channels = []
+    try:
+        for c in json.load(open(CHANNELS_JSON)).get("channels", []):
+            supported = c.get("status") == "supported"
+            channels.append({
+                "kind": c.get("id"), "name": c.get("name"), "status": c.get("status"),
+                "enabled": bool(c.get("enabled")),
+                "answer": supported,                                   # 可接听
+                "outbound": supported and c.get("kind") == "cellular",  # 外呼目前仅蜂窝电话
+            })
+    except Exception:
+        pass
+    return [{
+        "pkey": "iphone-13", "label": "iPhone 13", "platform": "ios",
+        "udid": IPHONE_UDID, "number": IPHONE_NUMBER,
+        "wda_ready": wda_ready, "locked": locked, "channels": channels,
+    }]
+
+
+async def report_phones(ws):
+    while True:
+        try:
+            await ws.send(json.dumps({"type": "phone_info", "phones": gather_phone_info()}))
+        except Exception:
+            return
+        await asyncio.sleep(30)
 UA = {"User-Agent": "Mozilla/5.0 AutoPhoneAgent-Edge"}   # Cloudflare 会拦默认 urllib UA
 
 
@@ -312,6 +354,7 @@ async def run(token):
         watcher = asyncio.create_task(watch_done(ws))
         syncer = asyncio.create_task(periodic_sync(ws))
         caller = asyncio.create_task(watch_calls(ws))
+        phoner = asyncio.create_task(report_phones(ws))        # 上报控制的 iPhone 状态+渠道
         await maybe_sync_contacts(ws)
         await ws.send(json.dumps({"type": "sync_pull"}))      # 连上即拉一次联系人+soul 缓存
         try:
@@ -330,7 +373,7 @@ async def run(token):
                     log(f"通讯录上报完成:共 {msg.get('total')},新增 {msg.get('created')},合并 {msg.get('merged')}")
                     await ws.send(json.dumps({"type": "sync_pull"}))   # 上报后立刻刷新缓存
         finally:
-            for x in (watcher, syncer, caller):
+            for x in (watcher, syncer, caller, phoner):
                 x.cancel()
 
 
