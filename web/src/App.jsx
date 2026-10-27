@@ -247,6 +247,8 @@ function Contacts() {
   const [memories, setMemories] = useState([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [soulSaved, setSoulSaved] = useState(false);
+  const soulName = (id) => (souls.find((s) => s.id === id) || {}).name || "";
 
   const load = async (query = q) => {
     try { setList(await api.listContacts(query)); setErr(""); } catch (x) { setErr(x.message); }
@@ -274,8 +276,10 @@ function Contacts() {
     const soul_id = e.target.value;
     setForm({ ...form, soul_id });
     if (editId) {
-      try { await api.updateContact(editId, { ...form, soul_id: soul_id || null }); setMsg("专属身份已保存"); load(); }
-      catch (x) { alert(x.message); }
+      try {
+        await api.updateContact(editId, { ...form, soul_id: soul_id || null });
+        setSoulSaved(true); setTimeout(() => setSoulSaved(false), 2500); load();
+      } catch (x) { alert(x.message); }
     }
   };
   const newDedicatedSoul = async () => {
@@ -332,7 +336,7 @@ function Contacts() {
         </div>
         <label>喜好</label><input value={form.preferences} onChange={set("preferences")} placeholder="喜欢靠窗、不吃辣…" />
         <label>备注</label><textarea value={form.notes} onChange={set("notes")} />
-        <label>专属身份(来电时用这个 Soul 接听;不选则用默认接线员){editId && <span className="muted"> · 选择即自动保存</span>}</label>
+        <label>专属身份(来电时用这个 Soul 接听;不选则用默认接线员){editId && <span className="muted"> · 选择即自动保存</span>}{soulSaved && <span style={{ color: "var(--ok)" }}> ✓ 已保存</span>}</label>
         <div className="row">
           <select style={{ flex: 1 }} value={form.soul_id || ""} onChange={onSoulChange}>
             <option value="">(默认接线员)</option>
@@ -375,14 +379,14 @@ function Contacts() {
       {err && <div className="err">{err}</div>}
       <div className="card">
         <table>
-          <thead><tr><th>姓名</th><th>电话</th><th>关系</th><th>机构</th><th>生日</th><th></th></tr></thead>
+          <thead><tr><th>姓名</th><th>电话</th><th>关系</th><th>专属身份</th><th>生日</th><th></th></tr></thead>
           <tbody>
             {list.map((c) => (
               <tr key={c.id}>
                 <td>{c.title && <span className="muted">{c.title} </span>}{c.name || <span className="muted">(无名)</span>}</td>
                 <td className="mono">{c.phone || <span className="muted">—</span>}</td>
                 <td>{c.relationship ? <span className="pill off">{relLabel(c.relationship)}</span> : <span className="muted">—</span>}</td>
-                <td className="muted">{c.org || "—"}</td>
+                <td>{c.soul_id ? <span className="pill on">{soulName(c.soul_id) || "已设"}</span> : <span className="muted">默认</span>}</td>
                 <td className="muted">{c.birthday || "—"}</td>
                 <td className="row">
                   <button className="sec" onClick={() => edit(c)}>编辑</button>
