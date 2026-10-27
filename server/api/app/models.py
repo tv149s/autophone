@@ -91,6 +91,37 @@ class Task(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
+class Contact(Base):
+    __tablename__ = "contacts"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128), default="")
+    phone: Mapped[str] = mapped_column(String(32), index=True, default="")      # E.164 归一化
+    phone_raw: Mapped[str] = mapped_column(String(64), default="")
+    title: Mapped[str] = mapped_column(String(16), default="")                  # 先生/女士/Dr…
+    relationship: Mapped[str] = mapped_column(String(32), default="")           # friend/colleague/customer/family/vendor/org/other
+    birthday: Mapped[str | None] = mapped_column(String(16), nullable=True)     # YYYY-MM-DD 或 MM-DD
+    age_range: Mapped[str] = mapped_column(String(32), default="")
+    preferences: Mapped[str] = mapped_column(Text, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    org: Mapped[str] = mapped_column(String(128), default="")
+    soul_id: Mapped[str | None] = mapped_column(String(32), nullable=True)      # 该联系人指定的身份(可选)
+    source: Mapped[str] = mapped_column(String(32), default="manual")           # manual/vcard/csv/google/android/call
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class ContactMemory(Base):
+    __tablename__ = "contact_memories"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    contact_id: Mapped[str] = mapped_column(ForeignKey("contacts.id", ondelete="CASCADE"), index=True)
+    call_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    summary: Mapped[str] = mapped_column(Text, default="")        # 本次通话提炼的要点
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class CallLog(Base):
     __tablename__ = "call_logs"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)

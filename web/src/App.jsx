@@ -155,9 +155,12 @@ function Dashboard({ onLogout }) {
       </div>
       <div className="tabs">
         <button className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>任务</button>
+        <button className={tab === "contacts" ? "active" : ""} onClick={() => setTab("contacts")}>通讯录</button>
         <button className={tab === "devices" ? "active" : ""} onClick={() => setTab("devices")}>设备</button>
       </div>
-      {tab === "tasks" ? <Tasks /> : <Devices />}
+      {tab === "tasks" && <Tasks />}
+      {tab === "contacts" && <Contacts />}
+      {tab === "devices" && <Devices />}
     </div>
   );
 }
@@ -168,6 +171,121 @@ function useAsync(fn, deps = []) {
   const reload = async () => { try { setData(await fn()); setErr(""); } catch (x) { setErr(x.message); } };
   useEffect(() => { reload(); /* eslint-disable-next-line */ }, deps);
   return [data, err, reload];
+}
+
+const RELATIONS = [
+  ["", "未分类"], ["friend", "朋友"], ["colleague", "同事"], ["customer", "客户"],
+  ["family", "家人"], ["vendor", "供应商"], ["org", "机构"], ["other", "其他"],
+];
+const relLabel = (r) => (RELATIONS.find((x) => x[0] === r) || ["", r])[1];
+
+const EMPTY_C = { name: "", phone: "", title: "", relationship: "", birthday: "", org: "", preferences: "", notes: "" };
+
+function Contacts() {
+  const [q, setQ] = useState("");
+  const [list, setList] = useState([]);
+  const [err, setErr] = useState("");
+  const [form, setForm] = useState(EMPTY_C);
+  const [editId, setEditId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = async (query = q) => {
+    try { setList(await api.listContacts(query)); setErr(""); } catch (x) { setErr(x.message); }
+  };
+  useEffect(() => { load(""); /* eslint-disable-next-line */ }, []);
+
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const resetForm = () => { setForm(EMPTY_C); setEditId(null); };
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      if (editId) await api.updateContact(editId, form);
+      else await api.createContact(form);
+      resetForm(); load();
+    } catch (x) { alert(x.message); } finally { setBusy(false); }
+  };
+  const edit = (c) => { setEditId(c.id); setForm({ ...EMPTY_C, ...c, birthday: c.birthday || "" }); window.scrollTo(0, 0); };
+  const del = async (id) => { if (!confirm("删除该联系人?")) return; try { await api.deleteContact(id); load(); } catch (x) { alert(x.message); } };
+
+  const onFile = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const text = await f.text();
+    const kind = f.name.toLowerCase().endsWith(".csv") ? "csv" : "vcard";
+    setBusy(true); setMsg("");
+    try {
+      const r = await api.importContacts(kind, text);
+      setMsg(`导入完成:共 ${r.total} 条,新增 ${r.created},合并 ${r.merged}`);
+      load();
+    } catch (x) { alert(x.message); } finally { setBusy(false); e.target.value = ""; }
+  };
+
+  return (
+    <div>
+      <div className="card">
+        <h2>{editId ? "编辑联系人" : "添加联系人"}</h2>
+        <div className="row">
+          <div style={{ flex: 2 }}><label>姓名</label><input value={form.name} onChange={set("name")} placeholder="王英雄" /></div>
+          <div style={{ flex: 2 }}><label>电话</label><input value={form.phone} onChange={set("phone")} placeholder="+1 425 555 0123" /></div>
+          <div style={{ flex: 1 }}><label>称谓</label><input value={form.title} onChange={set("title")} placeholder="先生/女士" /></div>
+        </div>
+        <div className="row">
+          <div style={{ flex: 1 }}><label>关系</label>
+            <select value={form.relationship} onChange={set("relationship")}>
+              {RELATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1 }}><label>生日</label><input value={form.birthday || ""} onChange={set("birthday")} placeholder="1980-05-01 或 05-01" /></div>
+          <div style={{ flex: 2 }}><label>单位/机构</label><input value={form.org} onChange={set("org")} /></div>
+        </div>
+        <label>喜好</label><input value={form.preferences} onChange={set("preferences")} placeholder="喜欢靠窗、不吃辣…" />
+        <label>备注</label><textarea value={form.notes} onChange={set("notes")} />
+        <div className="row" style={{ marginTop: 14 }}>
+          <button disabled={busy || (!form.name && !form.phone)} onClick={save}>{editId ? "保存修改" : "添加"}</button>
+          {editId && <button className="sec" onClick={resetForm}>取消</button>}
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>导入通讯录</h2>
+        <p className="muted" style={{ marginTop: 0 }}>支持 <b style={{ color: "var(--text)" }}>.vcf(vCard)</b> 和 <b style={{ color: "var(--text)" }}>.csv</b>。手机/Google/Outlook 均可导出成这两种格式。号码会自动归一化、按号码去重合并。</p>
+        <input type="file" accept=".vcf,.csv,text/vcard,text/csv" onChange={onFile} disabled={busy} />
+        {msg && <div className="ok">{msg}</div>}
+      </div>
+
+      <div className="spread">
+        <h2>联系人（{list.length}）</h2>
+        <div className="row">
+          <input style={{ width: 200 }} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} placeholder="搜索姓名/号码/机构" />
+          <button className="sec" onClick={() => load()}>搜索</button>
+        </div>
+      </div>
+      {err && <div className="err">{err}</div>}
+      <div className="card">
+        <table>
+          <thead><tr><th>姓名</th><th>电话</th><th>关系</th><th>机构</th><th>生日</th><th></th></tr></thead>
+          <tbody>
+            {list.map((c) => (
+              <tr key={c.id}>
+                <td>{c.title && <span className="muted">{c.title} </span>}{c.name || <span className="muted">(无名)</span>}</td>
+                <td className="mono">{c.phone || <span className="muted">—</span>}</td>
+                <td>{c.relationship ? <span className="pill off">{relLabel(c.relationship)}</span> : <span className="muted">—</span>}</td>
+                <td className="muted">{c.org || "—"}</td>
+                <td className="muted">{c.birthday || "—"}</td>
+                <td className="row">
+                  <button className="sec" onClick={() => edit(c)}>编辑</button>
+                  <button className="danger" onClick={() => del(c.id)}>删除</button>
+                </td>
+              </tr>
+            ))}
+            {list.length === 0 && <tr><td colSpan={6} className="muted">还没有联系人。手动添加或导入 vCard/CSV。</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function Devices() {
