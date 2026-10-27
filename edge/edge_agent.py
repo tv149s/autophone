@@ -36,6 +36,9 @@ LOGIN_PORT = int(os.environ.get("EDGE_LOGIN_PORT", "5173"))
 TOKEN_FILE = f"{HERE}/edge_token.txt"
 REPORTED = f"{HERE}/.edge_reported.json"
 CONTACTS_FLAG = f"{HERE}/.contacts_synced"
+CACHE = f"{HERE}/contacts_cache.json"           # duplex 来电匹配读这个
+MEM_REPORTED = f"{HERE}/.edge_mem_reported.json"
+CALLS = f"{HERE}/calls"
 UA = {"User-Agent": "Mozilla/5.0 AutoPhoneAgent-Edge"}   # Cloudflare 会拦默认 urllib UA
 
 
@@ -235,27 +238,100 @@ async def watch_done(ws):
         await asyncio.sleep(2)
 
 
+def write_cache(bundle: dict):
+    """把服务器下发的联系人+soul 写成 duplex 可读的本地缓存,建号码/姓名两套索引。"""
+    souls = {s["id"]: s for s in bundle.get("souls", [])}
+    by_phone, by_name = {}, {}
+    for c in bundle.get("contacts", []):
+        if c.get("phone"):
+            by_phone[c["phone"]] = c
+        if c.get("name"):
+            by_name[c["name"].strip()] = c
+    json.dump({"by_phone": by_phone, "by_name": by_name, "souls": souls},
+              open(CACHE, "w"), ensure_ascii=False, indent=2)
+
+
+async def periodic_sync(ws):
+    """定期拉取,拾取网页上对联系人/soul 的改动。"""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            await ws.send(json.dumps({"type": "sync_pull"}))
+        except Exception:
+            return
+
+
+def _load_json(p, default):
+    try:
+        return json.load(open(p))
+    except Exception:
+        return default
+
+
+async def watch_calls(ws):
+    """监视 calls/ 新出现的来电记录,把本次要点归档到对应联系人(按号码/姓名经缓存解析)。"""
+    reported = set(_load_json(MEM_REPORTED, []))
+    # 首次启动以现有记录为基线,不回溯历史
+    if not os.path.exists(MEM_REPORTED):
+        reported = {os.path.basename(f) for f in glob.glob(f"{CALLS}/*.json")}
+        json.dump(list(reported), open(MEM_REPORTED, "w"))
+    while True:
+        cache = _load_json(CACHE, {"by_phone": {}, "by_name": {}})
+        for f in sorted(glob.glob(f"{CALLS}/*.json")):
+            base = os.path.basename(f)
+            if base in reported:
+                continue
+            rec = _load_json(f, None)
+            reported.add(base)
+            if rec:
+                summary = (rec.get("summary") or "").strip()
+                raw = str(rec.get("number_raw") or rec.get("number") or "")
+                # 解析到联系人的规范号码:缓存里按姓名或号码找
+                phone = ""
+                if raw in cache.get("by_name", {}):
+                    phone = cache["by_name"][raw].get("phone", "")
+                if not phone and any(ch.isdigit() for ch in raw):
+                    phone = raw            # 看着像号码,交给服务器归一化
+                if summary and phone:
+                    try:
+                        await ws.send(json.dumps({"type": "call_memory", "phone": phone,
+                                                  "name": rec.get("number_raw", ""), "summary": summary,
+                                                  "call_id": base}))
+                        log(f"通话记忆已归档 → {phone}")
+                    except Exception:
+                        pass
+            json.dump(list(reported)[-500:], open(MEM_REPORTED, "w"))
+        await asyncio.sleep(3)
+
+
 async def run(token):
     url = f"{WS_URL}?token={token}"
     async with websockets.connect(url, open_timeout=20, ping_interval=30, ping_timeout=20) as ws:
         hello = json.loads(await ws.recv())
         log("已连上控制面:", hello)
         watcher = asyncio.create_task(watch_done(ws))
+        syncer = asyncio.create_task(periodic_sync(ws))
+        caller = asyncio.create_task(watch_calls(ws))
         await maybe_sync_contacts(ws)
+        await ws.send(json.dumps({"type": "sync_pull"}))      # 连上即拉一次联系人+soul 缓存
         try:
             while True:
                 msg = json.loads(await ws.recv())
-                if msg.get("type") == "task":
-                    t = msg["task"]
-                    fn = write_pending(t)
-                    log(f"收到任务 {t.get('id','')[:8]} → 写入 pending/{fn}")
-                    await ws.send(json.dumps({"type": "report", "task_id": t["id"], "status": "running"}))
-                elif msg.get("type") == "contacts_import_done":
+                t = msg.get("type")
+                if t == "task":
+                    tk = msg["task"]
+                    fn = write_pending(tk)
+                    log(f"收到任务 {tk.get('id','')[:8]} → 写入 pending/{fn}")
+                    await ws.send(json.dumps({"type": "report", "task_id": tk["id"], "status": "running"}))
+                elif t == "sync":
+                    write_cache(msg)
+                    log(f"已同步缓存:联系人 {len(msg.get('contacts', []))},soul {len(msg.get('souls', []))}")
+                elif t == "contacts_import_done":
                     log(f"通讯录上报完成:共 {msg.get('total')},新增 {msg.get('created')},合并 {msg.get('merged')}")
-                elif msg.get("type") == "hello":
-                    pass
+                    await ws.send(json.dumps({"type": "sync_pull"}))   # 上报后立刻刷新缓存
         finally:
-            watcher.cancel()
+            for x in (watcher, syncer, caller):
+                x.cancel()
 
 
 async def main():

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..deps import current_user
-from ..models import Contact, User
+from ..models import Contact, ContactMemory, User
 from ..phoneutil import normalize
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
@@ -79,6 +79,19 @@ async def _upsert(db, user_id, data: dict, source: str):
                 notes=data.get("notes", ""), org=data.get("org", ""), tags=data.get("tags", []))
     db.add(c)
     return "created"
+
+
+@router.get("/{cid}")
+async def get_contact(cid: str, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    c = await db.get(Contact, cid)
+    if not c or c.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "联系人不存在")
+    mems = (await db.execute(
+        select(ContactMemory).where(ContactMemory.contact_id == cid)
+        .order_by(ContactMemory.created_at.desc()).limit(50)
+    )).scalars().all()
+    return {**_view(c), "memories": [
+        {"summary": m.summary, "created_at": m.created_at, "call_id": m.call_id} for m in mems]}
 
 
 @router.post("")

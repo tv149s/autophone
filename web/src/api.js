@@ -47,7 +47,13 @@ export const api = {
   renameDevice: (id, name) => req(`/devices/${id}`, { method: "PATCH", auth: true, body: { name } }),
   deleteDevice: (id) => req(`/devices/${id}`, { method: "DELETE", auth: true }),
 
+  listSouls: () => req("/souls", { auth: true }),
+  createSoul: (data) => req("/souls", { method: "POST", auth: true, body: data }),
+  updateSoul: (id, data) => req(`/souls/${id}`, { method: "PATCH", auth: true, body: data }),
+  deleteSoul: (id) => req(`/souls/${id}`, { method: "DELETE", auth: true }),
+
   listContacts: (q = "") => req(`/contacts${q ? `?q=${encodeURIComponent(q)}` : ""}`, { auth: true }),
+  getContact: (id) => req(`/contacts/${id}`, { auth: true }),
   createContact: (data) => req("/contacts", { method: "POST", auth: true, body: data }),
   updateContact: (id, data) => req(`/contacts/${id}`, { method: "PATCH", auth: true, body: data }),
   deleteContact: (id) => req(`/contacts/${id}`, { method: "DELETE", auth: true }),

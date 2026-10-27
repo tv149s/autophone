@@ -156,10 +156,12 @@ function Dashboard({ onLogout }) {
       <div className="tabs">
         <button className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>任务</button>
         <button className={tab === "contacts" ? "active" : ""} onClick={() => setTab("contacts")}>通讯录</button>
+        <button className={tab === "souls" ? "active" : ""} onClick={() => setTab("souls")}>身份</button>
         <button className={tab === "devices" ? "active" : ""} onClick={() => setTab("devices")}>设备</button>
       </div>
       {tab === "tasks" && <Tasks />}
       {tab === "contacts" && <Contacts />}
+      {tab === "souls" && <Souls />}
       {tab === "devices" && <Devices />}
     </div>
   );
@@ -173,40 +175,116 @@ function useAsync(fn, deps = []) {
   return [data, err, reload];
 }
 
+function Souls() {
+  const [souls, err, reload] = useAsync(() => api.listSouls());
+  const [editId, setEditId] = useState(null);
+  const [form, setForm] = useState({ name: "", body: "" });
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      if (editId) await api.updateSoul(editId, { ...form, meta: {} });
+      else await api.createSoul({ ...form, meta: {} });
+      setForm({ name: "", body: "" }); setEditId(null); reload();
+    } catch (x) { alert(x.message); } finally { setBusy(false); }
+  };
+  const edit = (s) => { setEditId(s.id); setForm({ name: s.name, body: s.body }); window.scrollTo(0, 0); };
+  const del = async (id) => { if (!confirm("删除该身份?绑定它的联系人会回退到默认接线员。")) return; try { await api.deleteSoul(id); reload(); } catch (x) { alert(x.message); } };
+
+  return (
+    <div>
+      <div className="card">
+        <h2>{editId ? "编辑身份" : "新建身份(Soul)"}</h2>
+        <label>名称</label>
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="如:法律顾问 / 餐厅客服 / 老友寒暄" />
+        <label>身份描述(决定语气、立场、职责;英文书写效果最好)</label>
+        <textarea style={{ minHeight: 160 }} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })}
+          placeholder="You are ... Be ... Handle ..." />
+        <div className="row" style={{ marginTop: 14 }}>
+          <button disabled={busy || !form.name} onClick={save}>{editId ? "保存" : "新建"}</button>
+          {editId && <button className="sec" onClick={() => { setEditId(null); setForm({ name: "", body: "" }); }}>取消</button>}
+        </div>
+      </div>
+      {err && <div className="err">{err}</div>}
+      <div className="card">
+        <table>
+          <thead><tr><th>名称</th><th>描述摘要</th><th></th></tr></thead>
+          <tbody>
+            {(souls || []).map((s) => (
+              <tr key={s.id}>
+                <td>{s.name}</td>
+                <td className="muted">{(s.body || "").slice(0, 80)}{(s.body || "").length > 80 ? "…" : ""}</td>
+                <td className="row">
+                  <button className="sec" onClick={() => edit(s)}>编辑</button>
+                  <button className="danger" onClick={() => del(s.id)}>删除</button>
+                </td>
+              </tr>
+            ))}
+            {souls && souls.length === 0 && <tr><td colSpan={3} className="muted">加载中…</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 const RELATIONS = [
   ["", "未分类"], ["friend", "朋友"], ["colleague", "同事"], ["customer", "客户"],
   ["family", "家人"], ["vendor", "供应商"], ["org", "机构"], ["other", "其他"],
 ];
 const relLabel = (r) => (RELATIONS.find((x) => x[0] === r) || ["", r])[1];
 
-const EMPTY_C = { name: "", phone: "", title: "", relationship: "", birthday: "", org: "", preferences: "", notes: "" };
+const EMPTY_C = { name: "", phone: "", title: "", relationship: "", birthday: "", org: "", preferences: "", notes: "", soul_id: "" };
 
 function Contacts() {
   const [q, setQ] = useState("");
   const [list, setList] = useState([]);
+  const [souls, setSouls] = useState([]);
   const [err, setErr] = useState("");
   const [form, setForm] = useState(EMPTY_C);
   const [editId, setEditId] = useState(null);
+  const [memories, setMemories] = useState([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
   const load = async (query = q) => {
     try { setList(await api.listContacts(query)); setErr(""); } catch (x) { setErr(x.message); }
   };
-  useEffect(() => { load(""); /* eslint-disable-next-line */ }, []);
+  useEffect(() => {
+    load("");
+    api.listSouls().then(setSouls).catch(() => {});
+    // eslint-disable-next-line
+  }, []);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-  const resetForm = () => { setForm(EMPTY_C); setEditId(null); };
+  const resetForm = () => { setForm(EMPTY_C); setEditId(null); setMemories([]); };
 
   const save = async () => {
     setBusy(true);
     try {
-      if (editId) await api.updateContact(editId, form);
-      else await api.createContact(form);
+      const payload = { ...form, soul_id: form.soul_id || null };
+      if (editId) await api.updateContact(editId, payload);
+      else await api.createContact(payload);
       resetForm(); load();
     } catch (x) { alert(x.message); } finally { setBusy(false); }
   };
-  const edit = (c) => { setEditId(c.id); setForm({ ...EMPTY_C, ...c, birthday: c.birthday || "" }); window.scrollTo(0, 0); };
+  const newDedicatedSoul = async () => {
+    const base = form.name || "联系人";
+    const s = await api.createSoul({
+      name: `专属·${base}`,
+      body: `You are the owner's assistant speaking with ${base}. Be warm and personal, remember what matters to them, and handle their requests the way the owner would.`,
+      meta: {},
+    });
+    setSouls(await api.listSouls());
+    setForm({ ...form, soul_id: s.id });
+    alert(`已新建专属身份「${s.name}」并选中。可到「身份」页细化它的描述。`);
+  };
+  const edit = async (c) => {
+    setEditId(c.id); setForm({ ...EMPTY_C, ...c, birthday: c.birthday || "", soul_id: c.soul_id || "" });
+    setMemories([]); window.scrollTo(0, 0);
+    try { const d = await api.getContact(c.id); setMemories(d.memories || []); } catch { /* ignore */ }
+  };
   const del = async (id) => { if (!confirm("删除该联系人?")) return; try { await api.deleteContact(id); load(); } catch (x) { alert(x.message); } };
 
   const onFile = async (e) => {
@@ -242,10 +320,30 @@ function Contacts() {
         </div>
         <label>喜好</label><input value={form.preferences} onChange={set("preferences")} placeholder="喜欢靠窗、不吃辣…" />
         <label>备注</label><textarea value={form.notes} onChange={set("notes")} />
+        <label>专属身份(来电时用这个 Soul 接听;不选则用默认接线员)</label>
+        <div className="row">
+          <select style={{ flex: 1 }} value={form.soul_id || ""} onChange={set("soul_id")}>
+            <option value="">(默认接线员)</option>
+            {souls.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <button className="sec" type="button" onClick={newDedicatedSoul}>+ 新建专属 Soul</button>
+        </div>
         <div className="row" style={{ marginTop: 14 }}>
           <button disabled={busy || (!form.name && !form.phone)} onClick={save}>{editId ? "保存修改" : "添加"}</button>
           {editId && <button className="sec" onClick={resetForm}>取消</button>}
         </div>
+        {editId && (
+          <div style={{ marginTop: 16 }}>
+            <label>通话记忆(越用越全)</label>
+            {memories.length === 0 && <div className="muted" style={{ fontSize: 13 }}>还没有通话记忆</div>}
+            {memories.map((m, i) => (
+              <div key={i} className="token" style={{ marginBottom: 6, borderStyle: "solid", borderColor: "var(--border)" }}>
+                <div className="muted" style={{ fontSize: 12 }}>{m.created_at ? new Date(m.created_at).toLocaleString() : ""}</div>
+                <div>{m.summary}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card">
