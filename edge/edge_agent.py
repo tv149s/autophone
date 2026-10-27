@@ -31,7 +31,7 @@ GOOGLE_CLIENT_ID = os.environ.get(
     "EDGE_GOOGLE_CLIENT_ID",
     "1011075408383-9jpp7rta3o6uo92b8dph5bm7it4st6vu.apps.googleusercontent.com",
 )
-LOGIN_PORT = int(os.environ.get("EDGE_LOGIN_PORT", "8799"))
+LOGIN_PORT = int(os.environ.get("EDGE_LOGIN_PORT", "5173"))
 TOKEN_FILE = f"{HERE}/edge_token.txt"
 REPORTED = f"{HERE}/.edge_reported.json"
 UA = {"User-Agent": "Mozilla/5.0 AutoPhoneAgent-Edge"}   # Cloudflare 会拦默认 urllib UA
@@ -111,7 +111,7 @@ def interactive_login():
         webbrowser.open(url)
     except Exception:
         pass
-    if not done.wait(timeout=300):
+    if not done.wait(timeout=600):
         srv.shutdown()
         raise SystemExit("登录超时,请重试")
     srv.shutdown()
