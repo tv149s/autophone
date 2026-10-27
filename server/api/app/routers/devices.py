@@ -16,6 +16,12 @@ class DeviceIn(BaseModel):
     kind: str = "mac"
 
 
+class RegisterIn(BaseModel):
+    name: str = ""
+    kind: str = "mac"
+    hostname: str = ""
+
+
 def _view(d: Device) -> dict:
     return {
         "id": d.id, "name": d.name, "kind": d.kind,
@@ -36,6 +42,25 @@ async def create_device(body: DeviceIn, user: User = Depends(current_user), db: 
     await db.commit()
     # token 只在创建时返回一次,边缘端用它连 WSS
     return {**_view(d), "token": d.token}
+
+
+@router.post("/register")
+async def register_self(body: RegisterIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    """客户端用自己的登录身份自助注册设备(登录即生效)。按 (user, hostname) 幂等,
+    同一台机器重复注册复用同一设备与令牌,避免重复堆积。"""
+    dev = None
+    if body.hostname:
+        dev = (await db.execute(
+            select(Device).where(Device.user_id == user.id, Device.hostname == body.hostname)
+        )).scalar_one_or_none()
+    if dev is None:
+        dev = Device(user_id=user.id, name=body.name or body.hostname or "设备",
+                     kind=body.kind, hostname=body.hostname, token=new_device_token())
+        db.add(dev)
+    elif body.name:
+        dev.name = body.name
+    await db.commit()
+    return {**_view(dev), "token": dev.token}
 
 
 @router.post("/{device_id}/rotate-token")

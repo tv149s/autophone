@@ -38,6 +38,7 @@ class Device(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(128), default="")
     kind: Mapped[str] = mapped_column(String(32), default="mac")   # mac|android|ios|linux
+    hostname: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)  # 客户端自助注册幂等键
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True, default=_uuid)
     online: Mapped[bool] = mapped_column(Boolean, default=False)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
