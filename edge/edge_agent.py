@@ -16,6 +16,7 @@ import http.server
 import json
 import os
 import socket
+import sqlite3
 import threading
 import time
 import urllib.request
@@ -34,7 +35,53 @@ GOOGLE_CLIENT_ID = os.environ.get(
 LOGIN_PORT = int(os.environ.get("EDGE_LOGIN_PORT", "5173"))
 TOKEN_FILE = f"{HERE}/edge_token.txt"
 REPORTED = f"{HERE}/.edge_reported.json"
+CONTACTS_FLAG = f"{HERE}/.contacts_synced"
 UA = {"User-Agent": "Mozilla/5.0 AutoPhoneAgent-Edge"}   # Cloudflare 会拦默认 urllib UA
+
+
+def read_mac_contacts() -> list:
+    """读 macOS 通讯录(iPhone 经 iCloud 同步而来)。需 Terminal 有完全磁盘访问权限。"""
+    dbs = glob.glob(os.path.expanduser(
+        "~/Library/Application Support/AddressBook/Sources/*/AddressBook-v22.abcddb"))
+    main = os.path.expanduser("~/Library/Application Support/AddressBook/AddressBook-v22.abcddb")
+    if os.path.exists(main):
+        dbs.append(main)
+    seen, out = set(), []
+    for d in dbs:
+        try:
+            con = sqlite3.connect(f"file:{d}?mode=ro", uri=True)
+            rows = con.execute(
+                "SELECT COALESCE(r.ZFIRSTNAME,''),COALESCE(r.ZLASTNAME,''),"
+                "COALESCE(r.ZORGANIZATION,''),p.ZFULLNUMBER "
+                "FROM ZABCDRECORD r JOIN ZABCDPHONENUMBER p ON p.ZOWNER=r.Z_PK"
+            ).fetchall()
+            con.close()
+        except Exception:
+            continue
+        for fn, ln, org, num in rows:
+            if not num or num in seen:
+                continue
+            seen.add(num)
+            name = " ".join(x for x in (fn, ln) if x).strip()
+            out.append({"name": name, "phone": num, "org": org or "", "tags": []})
+    return out
+
+
+async def maybe_sync_contacts(ws):
+    """首次连上时把本机通讯录上报一次(服务器按号码去重合并)。EDGE_SYNC_CONTACTS=1 可强制重传。"""
+    if os.path.exists(CONTACTS_FLAG) and not os.environ.get("EDGE_SYNC_CONTACTS"):
+        return
+    try:
+        contacts = read_mac_contacts()
+    except Exception as e:
+        log("读取本机通讯录失败:", e)
+        return
+    if not contacts:
+        log("本机通讯录为空或读不到(检查完全磁盘访问权限)")
+        return
+    await ws.send(json.dumps({"type": "contacts_import", "contacts": contacts}))
+    log(f"已上报本机通讯录 {len(contacts)} 条")
+    open(CONTACTS_FLAG, "w").write(str(time.time()))
 
 
 def log(*a):
@@ -194,6 +241,7 @@ async def run(token):
         hello = json.loads(await ws.recv())
         log("已连上控制面:", hello)
         watcher = asyncio.create_task(watch_done(ws))
+        await maybe_sync_contacts(ws)
         try:
             while True:
                 msg = json.loads(await ws.recv())
@@ -202,6 +250,8 @@ async def run(token):
                     fn = write_pending(t)
                     log(f"收到任务 {t.get('id','')[:8]} → 写入 pending/{fn}")
                     await ws.send(json.dumps({"type": "report", "task_id": t["id"], "status": "running"}))
+                elif msg.get("type") == "contacts_import_done":
+                    log(f"通讯录上报完成:共 {msg.get('total')},新增 {msg.get('created')},合并 {msg.get('merged')}")
                 elif msg.get("type") == "hello":
                     pass
         finally:

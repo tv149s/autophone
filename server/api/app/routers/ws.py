@@ -43,6 +43,21 @@ async def _push_pending(device_id: str):
             }})
 
 
+async def _import_contacts(device_id: str, items: list) -> dict:
+    from .contacts import _upsert
+    async with SessionLocal() as db:
+        d = await db.get(Device, device_id)
+        if not d:
+            return {"created": 0, "merged": 0}
+        created = merged = 0
+        for it in items or []:
+            r = await _upsert(db, d.user_id, it, source="device")
+            created += r == "created"
+            merged += r == "merged"
+        await db.commit()
+        return {"created": created, "merged": merged, "total": len(items or [])}
+
+
 async def _apply_report(device_id: str, msg: dict):
     task_id = msg.get("task_id")
     if not task_id:
@@ -80,6 +95,9 @@ async def edge_ws(ws: WebSocket, token: str = ""):
                 await ws.send_json({"type": "pong"})
             elif kind == "report":
                 await _apply_report(device_id, msg)
+            elif kind == "contacts_import":
+                res = await _import_contacts(device_id, msg.get("contacts", []))
+                await ws.send_json({"type": "contacts_import_done", **res})
             elif kind == "status":
                 await _mark(device_id, True)
     except WebSocketDisconnect:
