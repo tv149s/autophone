@@ -1,0 +1,44 @@
+# CallAgent 控制面 —— 自包含,只绑 127.0.0.1,不碰宿主其他服务(mailcow/aiyouapp)
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ap-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - ap-db-data:/var/lib/postgresql/data
+    networks: [ap-net]
+    # 仅调试需要时映射;默认只在内网,不暴露宿主端口
+    # ports: ["127.0.0.1:18432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: ap-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [ap-net]
+
+  api:
+    build: ./api
+    container_name: ap-api
+    restart: unless-stopped
+    depends_on: [db, redis]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET}
+      APP_BASE_URL: ${APP_BASE_URL}
+      ENV: ${ENV}
+    ports:
+      - "127.0.0.1:18080:8000"   # 只给宿主 Apache 反代用
+    networks: [ap-net]
+
+volumes:
+  ap-db-data:
+
+networks:
+  ap-net:
+    name: ap-net

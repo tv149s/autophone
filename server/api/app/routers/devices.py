@@ -1,0 +1,58 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..auth import new_device_token
+from ..db import get_db
+from ..deps import current_user
+from ..models import Device, User
+
+router = APIRouter(prefix="/devices", tags=["devices"])
+
+
+class DeviceIn(BaseModel):
+    name: str = ""
+    kind: str = "mac"
+
+
+def _view(d: Device) -> dict:
+    return {
+        "id": d.id, "name": d.name, "kind": d.kind,
+        "online": d.online, "last_seen": d.last_seen, "created_at": d.created_at,
+    }
+
+
+@router.get("")
+async def list_devices(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(select(Device).where(Device.user_id == user.id))).scalars().all()
+    return [_view(d) for d in rows]
+
+
+@router.post("")
+async def create_device(body: DeviceIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    d = Device(user_id=user.id, name=body.name, kind=body.kind, token=new_device_token())
+    db.add(d)
+    await db.commit()
+    # token 只在创建时返回一次,边缘端用它连 WSS
+    return {**_view(d), "token": d.token}
+
+
+@router.post("/{device_id}/rotate-token")
+async def rotate_token(device_id: str, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    d = await db.get(Device, device_id)
+    if not d or d.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "设备不存在")
+    d.token = new_device_token()
+    await db.commit()
+    return {**_view(d), "token": d.token}
+
+
+@router.delete("/{device_id}")
+async def delete_device(device_id: str, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    d = await db.get(Device, device_id)
+    if not d or d.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "设备不存在")
+    await db.delete(d)
+    await db.commit()
+    return {"ok": True}

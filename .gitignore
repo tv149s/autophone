@@ -1,0 +1,27 @@
+# 机密与本地部署文档(绝不上传公开仓库)
+.env
+*.env
+!*.env.example
+BUILD_PLAN.md
+DEPLOY.local.md
+*.local.md
+secrets/
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
+venv/
+venv312/
+.venv/
+
+# Node / 前端构建产物
+node_modules/
+web/dist/
+web-dist/
+*.tgz
+
+# 杂项
+.DS_Store
+*.log
