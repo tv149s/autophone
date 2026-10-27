@@ -417,6 +417,9 @@ function Devices() {
   const toggleAuto = async (p) => {
     try { await api.setPhoneAutoAnswer(p.id, !p.auto_answer); loadPhones(); } catch (x) { alert(x.message); }
   };
+  const toggleChannel = async (p, c) => {
+    try { await api.setPhoneChannel(p.id, c.kind, { enabled: !c.enabled }); loadPhones(); } catch (x) { alert(x.message); }
+  };
 
   const del = async (id) => {
     if (!confirm("移除该设备?移除后它将无法接任务,需在该设备上重新登录客户端。")) return;
@@ -476,7 +479,7 @@ function Devices() {
             </div>
           </div>
           <table style={{ marginTop: 10 }}>
-            <thead><tr><th>应用/渠道</th><th>可接听</th><th>可外呼</th><th>状态</th></tr></thead>
+            <thead><tr><th>应用/渠道</th><th>可接听</th><th>可外呼</th><th>状态</th><th>启用</th></tr></thead>
             <tbody>
               {(p.channels || []).map((c) => (
                 <tr key={c.kind}>
@@ -484,9 +487,17 @@ function Devices() {
                   <td>{c.answer ? <span className="pill on">接听</span> : <span className="muted">—</span>}</td>
                   <td>{c.outbound ? <span className="pill on">外呼</span> : <span className="muted">—</span>}</td>
                   <td><span className={"pill " + (c.status === "supported" ? "on" : "off")}>{{ supported: "已测通", testing: "测试中", untested: "未测", unsupported: "不支持" }[c.status] || c.status}</span></td>
+                  <td>
+                    <button className={c.enabled ? "" : "sec"}
+                            disabled={c.status !== "supported" && !c.enabled}
+                            title={c.status !== "supported" ? "仅已测通的渠道建议开启" : ""}
+                            onClick={() => toggleChannel(p, c)}>
+                      {c.enabled ? "已启用" : "已关闭"}
+                    </button>
+                  </td>
                 </tr>
               ))}
-              {(p.channels || []).length === 0 && <tr><td colSpan={4} className="muted">无渠道信息</td></tr>}
+              {(p.channels || []).length === 0 && <tr><td colSpan={5} className="muted">无渠道信息</td></tr>}
             </tbody>
           </table>
         </div>

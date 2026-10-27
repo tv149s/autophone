@@ -93,7 +93,13 @@ async def _upsert_phones(device_id: str, phones: list):
             p.number = ph.get("number", "") or p.number
             p.wda_ready = bool(ph.get("wda_ready", False))
             p.locked = bool(ph.get("locked", False))
-            p.channels = ph.get("channels", []) or []
+            ch = ph.get("channels", []) or []
+            ov = p.overrides or {}                 # 用户覆盖盖在边缘上报之上
+            for c in ch:
+                o = ov.get(c.get("kind"))
+                if o:
+                    c.update({k: v for k, v in o.items() if v is not None})
+            p.channels = ch
             p.last_report = datetime.now(timezone.utc)
         await db.commit()
 

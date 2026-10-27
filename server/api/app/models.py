@@ -59,6 +59,7 @@ class Phone(Base):
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_answer: Mapped[bool] = mapped_column(Boolean, default=True)
     channels: Mapped[list] = mapped_column(JSON, default=list)     # [{kind,name,status,enabled,answer,outbound}]
+    overrides: Mapped[dict] = mapped_column(JSON, default=dict)    # 用户覆盖 {kind:{enabled,asr,reply_language}},不被边缘上报冲掉
     last_report: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 

@@ -74,13 +74,37 @@ def gather_phone_info() -> list:
     }]
 
 
+async def send_phone_info(ws):
+    try:
+        await ws.send(json.dumps({"type": "phone_info", "phones": gather_phone_info()}))
+    except Exception:
+        pass
+
+
 async def report_phones(ws):
     while True:
-        try:
-            await ws.send(json.dumps({"type": "phone_info", "phones": gather_phone_info()}))
-        except Exception:
-            return
+        await send_phone_info(ws)
         await asyncio.sleep(30)
+
+
+def apply_channel_config(cfg: dict) -> bool:
+    """把网页下发的渠道设置写入 channels.json(duplex 会热加载生效)。cfg: {kind:{enabled,asr,reply_language}}"""
+    try:
+        doc = json.load(open(CHANNELS_JSON))
+    except Exception:
+        return False
+    changed = False
+    for ch in doc.get("channels", []):
+        o = cfg.get(ch.get("id"))
+        if not o:
+            continue
+        for k in ("enabled", "asr", "reply_language"):
+            if o.get(k) is not None and ch.get(k) != o[k]:
+                ch[k] = o[k]
+                changed = True
+    if changed:
+        json.dump(doc, open(CHANNELS_JSON, "w"), ensure_ascii=False, indent=2)
+    return changed
 UA = {"User-Agent": "Mozilla/5.0 AutoPhoneAgent-Edge"}   # Cloudflare 会拦默认 urllib UA
 
 
@@ -369,6 +393,10 @@ async def run(token):
                 elif t == "sync":
                     write_cache(msg)
                     log(f"已同步缓存:联系人 {len(msg.get('contacts', []))},soul {len(msg.get('souls', []))}")
+                elif t == "channel_config":
+                    if apply_channel_config(msg.get("channels", {})):
+                        log(f"已应用渠道设置: {list(msg.get('channels', {}).keys())}")
+                    await send_phone_info(ws)        # 应用后立刻回报,网页即时反映
                 elif t == "contacts_import_done":
                     log(f"通讯录上报完成:共 {msg.get('total')},新增 {msg.get('created')},合并 {msg.get('merged')}")
                     await ws.send(json.dumps({"type": "sync_pull"}))   # 上报后立刻刷新缓存
