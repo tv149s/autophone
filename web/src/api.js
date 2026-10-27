@@ -44,7 +44,7 @@ export const api = {
     req("/auth/2fa/verify", { method: "POST", body: { code }, bearer: mfaToken }),
 
   listDevices: () => req("/devices", { auth: true }),
-  createDevice: (name, kind) => req("/devices", { method: "POST", auth: true, body: { name, kind } }),
+  renameDevice: (id, name) => req(`/devices/${id}`, { method: "PATCH", auth: true, body: { name } }),
   deleteDevice: (id) => req(`/devices/${id}`, { method: "DELETE", auth: true }),
 
   listTasks: () => req("/tasks", { auth: true }),

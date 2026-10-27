@@ -24,9 +24,13 @@ class RegisterIn(BaseModel):
 
 def _view(d: Device) -> dict:
     return {
-        "id": d.id, "name": d.name, "kind": d.kind,
+        "id": d.id, "name": d.name, "kind": d.kind, "hostname": d.hostname,
         "online": d.online, "last_seen": d.last_seen, "created_at": d.created_at,
     }
+
+
+class RenameIn(BaseModel):
+    name: str
 
 
 @router.get("")
@@ -71,6 +75,16 @@ async def rotate_token(device_id: str, user: User = Depends(current_user), db: A
     d.token = new_device_token()
     await db.commit()
     return {**_view(d), "token": d.token}
+
+
+@router.patch("/{device_id}")
+async def rename_device(device_id: str, body: RenameIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    d = await db.get(Device, device_id)
+    if not d or d.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "设备不存在")
+    d.name = body.name
+    await db.commit()
+    return _view(d)
 
 
 @router.delete("/{device_id}")

@@ -167,58 +167,50 @@ function useAsync(fn, deps = []) {
 
 function Devices() {
   const [devices, err, reload] = useAsync(() => api.listDevices());
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState("mac");
-  const [newToken, setNewToken] = useState(null);
-  const [busy, setBusy] = useState(false);
+  // 自动刷新:在设备上登录客户端后会自动出现,无需手动创建
+  useEffect(() => {
+    const t = setInterval(reload, 5000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line
+  }, []);
 
-  const add = async () => {
-    setBusy(true);
-    try { const d = await api.createDevice(name, kind); setNewToken(d); setName(""); reload(); }
-    catch (x) { alert(x.message); } finally { setBusy(false); }
-  };
   const del = async (id) => {
-    if (!confirm("删除该设备?其令牌将失效。")) return;
+    if (!confirm("移除该设备?移除后它将无法接任务,需在该设备上重新登录客户端。")) return;
     try { await api.deleteDevice(id); reload(); } catch (x) { alert(x.message); }
+  };
+  const rename = async (d) => {
+    const name = prompt("设备名称", d.name || "");
+    if (name == null) return;
+    try { await api.renameDevice(d.id, name); reload(); } catch (x) { alert(x.message); }
   };
 
   return (
     <div>
       <div className="card">
-        <h2>注册新设备(边缘端)</h2>
-        <div className="row">
-          <div style={{ flex: 2 }}><label>名称</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder="我的 Mac 边缘端" /></div>
-          <div style={{ flex: 1 }}><label>类型</label>
-            <select value={kind} onChange={(e) => setKind(e.target.value)}>
-              <option value="mac">mac</option><option value="android">android</option>
-              <option value="ios">ios</option><option value="linux">linux</option>
-            </select>
-          </div>
-          <div style={{ alignSelf: "flex-end" }}><button disabled={busy || !name} onClick={add}>创建</button></div>
-        </div>
-        {newToken && (
-          <div style={{ marginTop: 14 }}>
-            <div className="ok">设备已创建。下面的令牌只显示这一次,请复制给边缘端:</div>
-            <div className="token mono" style={{ marginTop: 6 }}>{newToken.token}</div>
-          </div>
-        )}
+        <p className="muted" style={{ margin: 0 }}>
+          在设备上登录客户端后,设备会<b style={{ color: "var(--text)" }}>自动出现</b>在这里并接入,无需手动创建。
+        </p>
       </div>
-      <h2>设备列表</h2>
+      <div className="spread"><h2>我的设备</h2><button className="sec" onClick={reload}>刷新</button></div>
       {err && <div className="err">{err}</div>}
       <div className="card">
         <table>
-          <thead><tr><th>名称</th><th>类型</th><th>在线</th><th>最后在线</th><th></th></tr></thead>
+          <thead><tr><th>名称</th><th>类型</th><th>主机名</th><th>在线</th><th>最后在线</th><th></th></tr></thead>
           <tbody>
             {(devices || []).map((d) => (
               <tr key={d.id}>
                 <td>{d.name || <span className="muted">(未命名)</span>}</td>
                 <td className="mono">{d.kind}</td>
+                <td className="mono muted">{d.hostname || "—"}</td>
                 <td><span className={"pill " + (d.online ? "on" : "off")}>{d.online ? "在线" : "离线"}</span></td>
                 <td className="muted">{d.last_seen ? new Date(d.last_seen).toLocaleString() : "—"}</td>
-                <td><button className="danger" onClick={() => del(d.id)}>删除</button></td>
+                <td className="row">
+                  <button className="sec" onClick={() => rename(d)}>改名</button>
+                  <button className="danger" onClick={() => del(d.id)}>移除</button>
+                </td>
               </tr>
             ))}
-            {devices && devices.length === 0 && <tr><td colSpan={5} className="muted">还没有设备</td></tr>}
+            {devices && devices.length === 0 && <tr><td colSpan={6} className="muted">还没有设备。在设备上登录客户端即可自动接入。</td></tr>}
           </tbody>
         </table>
       </div>
