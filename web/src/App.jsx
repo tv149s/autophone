@@ -321,9 +321,9 @@ function Contacts() {
       <div className="card">
         <h2>{editId ? "编辑联系人" : "添加联系人"}</h2>
         <div className="row">
-          <div style={{ flex: 2 }}><label>姓名</label><input value={form.name} onChange={set("name")} placeholder="王英雄" /></div>
-          <div style={{ flex: 2 }}><label>电话</label><input value={form.phone} onChange={set("phone")} placeholder="+1 425 555 0123" /></div>
-          <div style={{ flex: 1 }}><label>称谓</label><input value={form.title} onChange={set("title")} placeholder="先生/女士" /></div>
+          <div style={{ flex: 2 }}><label>姓名</label><input value={form.name} onChange={set("name")} placeholder="填写姓名" /></div>
+          <div style={{ flex: 2 }}><label>电话</label><input value={form.phone} onChange={set("phone")} placeholder="填写电话号码" /></div>
+          <div style={{ flex: 1 }}><label>称谓</label><input value={form.title} onChange={set("title")} placeholder="可选" /></div>
         </div>
         <div className="row">
           <div style={{ flex: 1 }}><label>关系</label>
@@ -331,10 +331,10 @@ function Contacts() {
               {RELATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
-          <div style={{ flex: 1 }}><label>生日</label><input value={form.birthday || ""} onChange={set("birthday")} placeholder="1980-05-01 或 05-01" /></div>
-          <div style={{ flex: 2 }}><label>单位/机构</label><input value={form.org} onChange={set("org")} /></div>
+          <div style={{ flex: 1 }}><label>生日</label><input value={form.birthday || ""} onChange={set("birthday")} placeholder="可选,格式 1980-05-01 或 05-01" /></div>
+          <div style={{ flex: 2 }}><label>单位/机构</label><input value={form.org} onChange={set("org")} placeholder="可选" /></div>
         </div>
-        <label>喜好</label><input value={form.preferences} onChange={set("preferences")} placeholder="喜欢靠窗、不吃辣…" />
+        <label>喜好</label><input value={form.preferences} onChange={set("preferences")} placeholder="可选,如接待偏好、忌口等" />
         <label>备注</label><textarea value={form.notes} onChange={set("notes")} />
         <label>专属身份(来电时用这个 Soul 接听;不选则用默认接线员){editId && <span className="muted"> · 选择即自动保存</span>}{soulSaved && <span style={{ color: "var(--ok)" }}> ✓ 已保存</span>}</label>
         <div className="row">
