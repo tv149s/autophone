@@ -6,7 +6,8 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 export default function App() {
   const [authed, setAuthed] = useState(hasToken());
   if (!authed) return <Auth onLogin={() => setAuthed(true)} />;
-  return <Dashboard onLogout={() => { setToken(""); setAuthed(false); }} />;
+  // 退出时整页刷新,让 Google 登录脚本(GIS)干净地重新初始化,否则再回登录页按钮不重绘
+  return <Dashboard onLogout={() => { setToken(""); window.location.reload(); }} />;
 }
 
 /* Google Identity Services 登录按钮 */
@@ -14,25 +15,29 @@ function GoogleButton({ onToken, onError }) {
   const ref = useRef(null);
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return;
-    const render = () => {
-      if (!window.google?.accounts?.id) return;
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (resp) => onToken(resp.credential),
-      });
-      if (ref.current) {
-        window.google.accounts.id.renderButton(ref.current, {
-          theme: "filled_blue", size: "large", width: 320, text: "continue_with",
+    let tries = 0;
+    let timer = null;
+    const tick = () => {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (resp) => onToken(resp.credential),
         });
+        if (ref.current) {
+          window.google.accounts.id.renderButton(ref.current, {
+            theme: "filled_blue", size: "large", width: 320, text: "continue_with",
+          });
+        }
+        return;
       }
+      if (++tries > 50) {        // 等约 10 秒仍没加载到 → 多半被浏览器拦截
+        onError?.("无法加载 Google 登录(可能被浏览器的隐私保护/广告拦截插件挡住了)");
+        return;
+      }
+      timer = setTimeout(tick, 200);
     };
-    if (window.google?.accounts?.id) { render(); return; }
-    const s = document.createElement("script");
-    s.src = "https://accounts.google.com/gsi/client";
-    s.async = true; s.defer = true;
-    s.onload = render;
-    s.onerror = () => onError?.("无法加载 Google 登录脚本");
-    document.head.appendChild(s);
+    tick();
+    return () => timer && clearTimeout(timer);
   }, []);
   if (!GOOGLE_CLIENT_ID)
     return <div className="muted" style={{ fontSize: 13 }}>Google 登录未配置(缺 Client ID)</div>;
