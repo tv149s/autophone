@@ -83,8 +83,10 @@ async def _upsert_phones(device_id: str, phones: list, registry=None):
             return
         if registry is not None:
             d.phone_registry = registry
+        seen_pkeys = []
         for ph in phones or []:
             pkey = ph.get("pkey") or ph.get("udid") or ph.get("label") or "phone"
+            seen_pkeys.append(pkey)
             p = (await db.execute(
                 select(Phone).where(Phone.device_id == device_id, Phone.pkey == pkey)
             )).scalar_one_or_none()
@@ -106,6 +108,13 @@ async def _upsert_phones(device_id: str, phones: list, registry=None):
                     c.update({k: v for k, v in o.items() if v is not None})
             p.channels = ch
             p.last_report = datetime.now(timezone.utc)
+        # 清掉本次未上报的僵尸电话行(历史 active 切换/旧 pkey 规则残留,否则页面越积越多、出现重复)
+        if phones:
+            stale = (await db.execute(
+                select(Phone).where(Phone.device_id == device_id, Phone.pkey.notin_(seen_pkeys))
+            )).scalars().all()
+            for p in stale:
+                await db.delete(p)
         await db.commit()
 
 

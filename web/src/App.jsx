@@ -468,7 +468,7 @@ function Devices() {
       {err && <div className="err">{err}</div>}
       <div className="card">
         <table>
-          <thead><tr><th>名称</th><th>类型</th><th>在线</th><th>受控电话(点击切换)</th><th></th></tr></thead>
+          <thead><tr><th>名称</th><th>类型</th><th>在线</th><th>当前电话</th><th></th></tr></thead>
           <tbody>
             {(devices || []).map((d) => (
               <tr key={d.id}>
@@ -476,16 +476,12 @@ function Devices() {
                 <td className="mono">{d.kind}</td>
                 <td><span className={"pill " + (d.online ? "on" : "off")}>{d.online ? "在线" : "离线"}</span></td>
                 <td>
-                  {(d.phone_registry || []).length === 0 ? <span className="muted">—</span> :
-                    <div className="row">
-                      {d.phone_registry.map((ph) => (
-                        <button key={ph.id} className={ph.active ? "" : "sec"} disabled={!d.online || (!ph.active && ph.ready === false)}
-                                title={ph.active ? "当前控制中" : (ph.ready === false ? "该机未安装 WDA,不能切换" : "切换到此电话")}
-                                onClick={() => switchPhone(d, ph)}>
-                          {ph.label}{ph.active ? " ·当前" : (ph.ready === false ? " (未装WDA)" : "")}
-                        </button>
-                      ))}
-                    </div>}
+                  {(() => {
+                    const act = (d.phone_registry || []).find((ph) => ph.active);
+                    return act ? <span>{act.label} <span className="muted" style={{ fontSize: 12 }}>· {act.platform}</span></span>
+                                : <span className="muted">—</span>;
+                  })()}
+                  <div className="mono muted" style={{ fontSize: 12 }}>切换见下方「电话」卡片</div>
                 </td>
                 <td className="row">
                   <button className="sec" onClick={() => rename(d)}>改名</button>
@@ -499,44 +495,72 @@ function Devices() {
       </div>
 
       <h2>电话</h2>
-      {phones.length === 0 && <div className="card"><span className="muted">边缘端上线后会自动上报它控制的电话(约 30 秒内出现)。</span></div>}
-      {phones.map((p) => (
-        <div className="card" key={p.id}>
-          <div className="spread">
-            <div>
-              <b>{p.label || "电话"}</b>
-              <span className="muted" style={{ marginLeft: 8 }}>{p.number} · {p.platform}</span>
-              <span className="muted" style={{ marginLeft: 8 }}>由 <b style={{ color: "var(--text)" }}>{p.device_name || "?"}</b> 控制</span>
-            </div>
-            <div className="row">
-              <span className={"pill " + (p.wda_ready ? "on" : "off")}>{p.wda_ready ? "控制就绪" : "未就绪"}</span>
-              <span className={"pill " + (p.locked ? "off" : "on")}>{p.locked ? "锁屏" : "亮屏"}</span>
-              {p.front_app && <span className="pill off">前台:{p.front_app}</span>}
-              <button className="sec" onClick={() => toggleAuto(p)}>{p.auto_answer ? "自动接听:开" : "自动接听:关"}</button>
-            </div>
+      {(devices || []).every((d) => (d.phone_registry || []).length === 0) &&
+        <div className="card"><span className="muted">边缘端上线后会自动上报它控制的电话(约 30 秒内出现)。</span></div>}
+      {(devices || []).map((d) => (d.phone_registry || []).length === 0 ? null : (
+        <div key={d.id} style={{ marginBottom: 18 }}>
+          <div className="muted" style={{ margin: "4px 0 8px" }}>
+            由 <b style={{ color: "var(--text)" }}>{d.name || "设备"}</b> 控制
+            <span className={"pill " + (d.online ? "on" : "off")} style={{ marginLeft: 8 }}>{d.online ? "在线" : "离线"}</span>
           </div>
-          <table style={{ marginTop: 10 }}>
-            <thead><tr><th>应用/渠道</th><th>可接听</th><th>可外呼</th><th>状态</th><th>启用</th></tr></thead>
-            <tbody>
-              {(p.channels || []).map((c) => (
-                <tr key={c.kind}>
-                  <td>{c.name || c.kind}{c.warn && <div className="err" style={{ fontSize: 12, marginTop: 2 }}>⚠️ {c.warn}</div>}</td>
-                  <td>{c.answer ? <span className="pill on">接听</span> : <span className="muted">—</span>}</td>
-                  <td>{c.outbound ? <span className="pill on">外呼</span> : <span className="muted">—</span>}</td>
-                  <td><span className={"pill " + (c.status === "supported" ? "on" : "off")}>{{ supported: "已测通", testing: "测试中", untested: "未测", unsupported: "不支持" }[c.status] || c.status}</span></td>
-                  <td>
-                    <button className={c.enabled ? "" : "sec"}
-                            disabled={c.status !== "supported" && !c.enabled}
-                            title={c.status !== "supported" ? "仅已测通的渠道建议开启" : ""}
-                            onClick={() => toggleChannel(p, c)}>
-                      {c.enabled ? "已启用" : "已关闭"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {(p.channels || []).length === 0 && <tr><td colSpan={5} className="muted">无渠道信息</td></tr>}
-            </tbody>
-          </table>
+          <div className="row" style={{ flexWrap: "wrap", alignItems: "flex-start" }}>
+            {d.phone_registry.map((ph) => {
+              const live = ph.active ? phones.find((p) => p.device_id === d.id && p.pkey === ph.id) : null;
+              return (
+                <div className="card" key={ph.id}
+                     style={{ flex: ph.active ? "1 1 100%" : "0 1 240px",
+                              border: ph.active ? "2px solid var(--accent, #3a9d7a)" : undefined,
+                              opacity: ph.active ? 1 : 0.9 }}>
+                  <div className="spread">
+                    <div>
+                      <b>{ph.label}</b>
+                      {ph.active && <span className="pill on" style={{ marginLeft: 8 }}>当前控制</span>}
+                      <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{ph.number || ""} · {ph.platform}</div>
+                    </div>
+                    {!ph.active &&
+                      <button className="sec" disabled={!d.online || ph.ready === false}
+                              title={ph.ready === false ? "该机控制端未就绪,不能切换" : "切换到此电话"}
+                              onClick={() => switchPhone(d, ph)}>
+                        {ph.ready === false ? "未就绪" : "切换到此机"}
+                      </button>}
+                  </div>
+                  {ph.active && live && (
+                    <>
+                      <div className="row" style={{ marginTop: 8 }}>
+                        <span className={"pill " + (live.wda_ready ? "on" : "off")}>{live.wda_ready ? "控制就绪" : "未就绪"}</span>
+                        <span className={"pill " + (live.locked ? "off" : "on")}>{live.locked ? "锁屏" : "亮屏"}</span>
+                        {live.front_app && <span className="pill off">前台:{live.front_app}</span>}
+                        <button className="sec" onClick={() => toggleAuto(live)}>{live.auto_answer ? "自动接听:开" : "自动接听:关"}</button>
+                      </div>
+                      <table style={{ marginTop: 10 }}>
+                        <thead><tr><th>应用/渠道</th><th>可接听</th><th>可外呼</th><th>状态</th><th>启用</th></tr></thead>
+                        <tbody>
+                          {(live.channels || []).map((c) => (
+                            <tr key={c.kind}>
+                              <td>{c.name || c.kind}{c.warn && <div className="err" style={{ fontSize: 12, marginTop: 2 }}>⚠️ {c.warn}</div>}</td>
+                              <td>{c.answer ? <span className="pill on">接听</span> : <span className="muted">—</span>}</td>
+                              <td>{c.outbound ? <span className="pill on">外呼</span> : <span className="muted">—</span>}</td>
+                              <td><span className={"pill " + (c.status === "supported" ? "on" : "off")}>{{ supported: "已测通", testing: "测试中", untested: "未测", unsupported: "不支持" }[c.status] || c.status}</span></td>
+                              <td>
+                                <button className={c.enabled ? "" : "sec"}
+                                        disabled={c.status !== "supported" && !c.enabled}
+                                        title={c.status !== "supported" ? "仅已测通的渠道建议开启" : ""}
+                                        onClick={() => toggleChannel(live, c)}>
+                                  {c.enabled ? "已启用" : "已关闭"}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                          {(live.channels || []).length === 0 && <tr><td colSpan={5} className="muted">无渠道信息</td></tr>}
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+                  {ph.active && !live && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>正在获取实时状态…</div>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       ))}
     </div>
