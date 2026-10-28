@@ -2,31 +2,67 @@
 const BASE = import.meta.env.VITE_API_BASE || "https://api.autophoneagent.com";
 
 let token = localStorage.getItem("ap_token") || "";
+let refresh = localStorage.getItem("ap_refresh") || "";
 
-export function setToken(t) {
+// 登录/刷新成功后保存令牌对;access 必填,refresh 可选(刷新时后端会轮换出新的)
+export function setToken(t, r) {
   token = t || "";
   if (t) localStorage.setItem("ap_token", t);
   else localStorage.removeItem("ap_token");
+  if (r !== undefined) {
+    refresh = r || "";
+    if (r) localStorage.setItem("ap_refresh", r);
+    else localStorage.removeItem("ap_refresh");
+  }
 }
 export function hasToken() {
   return !!token;
 }
 
-async function req(path, { method = "GET", body, auth = false, bearer } = {}) {
-  const headers = { "Content-Type": "application/json" };
-  const b = bearer ?? (auth ? token : null);
-  if (b) headers["Authorization"] = `Bearer ${b}`;
+async function rawReq(path, { method = "GET", body, headers = {} } = {}) {
   const res = await fetch(BASE + path, {
     method,
-    headers,
+    headers: { "Content-Type": "application/json", ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
   let data;
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { detail: text };
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { detail: text }; }
+  return { res, data };
+}
+
+let refreshing = null;   // 并发请求同时 401 时,只发一次刷新
+async function doRefresh() {
+  if (!refresh) return false;
+  if (!refreshing) {
+    refreshing = rawReq("/auth/refresh", { method: "POST", body: { refresh_token: refresh } })
+      .then(({ res, data }) => {
+        if (res.ok && data.access_token) {
+          setToken(data.access_token, data.refresh_token);
+          return true;
+        }
+        return false;
+      })
+      .catch(() => false)
+      .finally(() => { setTimeout(() => (refreshing = null), 0); });
+  }
+  return refreshing;
+}
+
+async function req(path, opts = {}) {
+  const { method = "GET", body, auth = false, bearer } = opts;
+  const b = bearer ?? (auth ? token : null);
+  const hdr = b ? { Authorization: `Bearer ${b}` } : {};
+  let { res, data } = await rawReq(path, { method, body, headers: hdr });
+  // access 过期 → 用 refresh 静默换新后重试一次(只对带登录态的请求,且非 auth 接口自身)
+  if (res.status === 401 && auth && !path.startsWith("/auth/")) {
+    if (await doRefresh()) {
+      ({ res, data } = await rawReq(path, { method, body, headers: { Authorization: `Bearer ${token}` } }));
+    } else {
+      setToken("", "");               // refresh 也失效 → 清空,回登录页
+      window.location.reload();
+      throw new Error("登录已过期,请重新登录");
+    }
   }
   if (!res.ok) {
     throw new Error(data.detail || `HTTP ${res.status}`);

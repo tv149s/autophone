@@ -7,7 +7,7 @@ export default function App() {
   const [authed, setAuthed] = useState(hasToken());
   if (!authed) return <Auth onLogin={() => setAuthed(true)} />;
   // 退出时整页刷新,让 Google 登录脚本(GIS)干净地重新初始化,否则再回登录页按钮不重绘
-  return <Dashboard onLogout={() => { setToken(""); window.location.reload(); }} />;
+  return <Dashboard onLogout={() => { setToken("", ""); window.location.reload(); }} />;
 }
 
 /* Google Identity Services 登录按钮 */
@@ -61,7 +61,7 @@ function Auth({ onLogin }) {
     setErr("");
     try {
       const r = await api.googleLogin(credential);
-      setToken(r.access_token); onLogin();
+      setToken(r.access_token, r.refresh_token); onLogin();
     } catch (x) { setErr(x.message); }
   };
 
@@ -77,7 +77,7 @@ function Auth({ onLogin }) {
   });
   const doVerify = run(async () => {
     const r = await api.verify2fa(mfaToken, code);
-    setToken(r.access_token); onLogin();
+    setToken(r.access_token, r.refresh_token); onLogin();
   });
   const doRegister = run(async () => {
     const r = await api.register(email, password);
@@ -85,7 +85,7 @@ function Auth({ onLogin }) {
   });
   const doEnable = run(async () => {
     const r = await api.enable2fa(email, password, code);
-    setToken(r.access_token); onLogin();
+    setToken(r.access_token, r.refresh_token); onLogin();
   });
 
   return (

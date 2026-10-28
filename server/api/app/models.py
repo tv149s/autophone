@@ -166,3 +166,15 @@ class AuditLog(Base):
     ip: Mapped[str] = mapped_column(String(64), default="")
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class RefreshToken(Base):
+    """刷新令牌(aifindcar 模式):登录后发一个长效 refresh token 存库,
+    access token 短期过期时用它静默换新,避免频繁重登。带轮换(用一次即撤销)。"""
+    __tablename__ = "refresh_tokens"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(32), index=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

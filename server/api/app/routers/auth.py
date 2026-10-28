@@ -3,15 +3,27 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from datetime import datetime, timedelta, timezone
+
 from ..auth import (
-    decode_token, hash_password, make_token, new_totp_secret,
+    decode_token, hash_password, make_token, new_refresh_token, new_totp_secret,
     totp_uri, verify_password, verify_totp,
 )
 from ..config import settings
 from ..db import get_db
-from ..models import User
+from ..models import RefreshToken, User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+async def issue_tokens(db: AsyncSession, user: User) -> dict:
+    """签发一对令牌:短期 access(JWT) + 长效 refresh(存库)。登录/刷新都走这里。"""
+    rt = RefreshToken(user_id=user.id, token=new_refresh_token(),
+                      expires_at=datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_days))
+    db.add(rt)
+    await db.commit()
+    return {"access_token": make_token(user.id, {"mfa_ok": True}),
+            "refresh_token": rt.token, "token_type": "bearer"}
 
 
 class RegisterIn(BaseModel):
@@ -64,7 +76,7 @@ async def google_login(body: GoogleIn, db: AsyncSession = Depends(get_db)):
         user.google_sub = sub          # 已有邮箱账号首次用 Google 登录 → 关联
         await db.commit()
     # Google 已完成强认证,直接发正式令牌
-    return {"access_token": make_token(user.id, {"mfa_ok": True}), "token_type": "bearer"}
+    return await issue_tokens(db, user)
 
 
 @router.post("/register")
@@ -91,7 +103,7 @@ async def enable_2fa(body: EnableIn, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "验证码错误")
     user.totp_enabled = True
     await db.commit()
-    return {"access_token": make_token(user.id, {"mfa_ok": True}), "token_type": "bearer"}
+    return await issue_tokens(db, user)
 
 
 @router.post("/login")
@@ -124,4 +136,24 @@ async def verify_2fa(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "用户不存在")
     if not verify_totp(user.totp_secret, body.code):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "验证码错误")
-    return {"access_token": make_token(user.id, {"mfa_ok": True}), "token_type": "bearer"}
+    return await issue_tokens(db, user)
+
+
+class RefreshIn(BaseModel):
+    refresh_token: str
+
+
+@router.post("/refresh")
+async def refresh(body: RefreshIn, db: AsyncSession = Depends(get_db)):
+    """用 refresh 令牌静默换新:校验未撤销未过期 → 撤销旧的(轮换)→ 发新的一对。"""
+    rt = (await db.execute(
+        select(RefreshToken).where(RefreshToken.token == body.refresh_token)
+    )).scalar_one_or_none()
+    if not rt or rt.revoked or rt.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "refresh 令牌无效或过期")
+    user = await db.get(User, rt.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "用户不存在或被禁用")
+    rt.revoked = True                     # 轮换:旧 refresh 用一次即失效
+    await db.commit()
+    return await issue_tokens(db, user)

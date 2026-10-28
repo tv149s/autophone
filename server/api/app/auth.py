@@ -44,3 +44,7 @@ def verify_totp(secret: str, code: str) -> bool:
 
 def new_device_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def new_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
