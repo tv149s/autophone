@@ -17,6 +17,7 @@ import json
 import os
 import socket
 import sqlite3
+import subprocess
 import threading
 import time
 import urllib.request
@@ -96,11 +97,29 @@ def gather_phone_info() -> list:
     }]
 
 
+def phone_registry():
+    """本边缘端可切换的电话清单(phones.json),供网页展示+切换。"""
+    try:
+        p = json.load(open(PHONES_JSON))
+        return [{"id": k, "label": v.get("label", k), "platform": v.get("platform", "ios"),
+                 "active": k == p.get("active")} for k, v in p.get("phones", {}).items()]
+    except Exception:
+        return []
+
+
 async def send_phone_info(ws):
     try:
-        await ws.send(json.dumps({"type": "phone_info", "phones": gather_phone_info()}))
+        await ws.send(json.dumps({"type": "phone_info", "phones": gather_phone_info(),
+                                  "registry": phone_registry()}))
     except Exception:
         pass
+
+
+def do_switch_phone(pid: str):
+    """执行切换(detached:脚本会杀掉本 edge_agent 并在结束时重启,所以必须独立会话)。"""
+    sh = os.path.expanduser("~/tools/switch-phone.sh")
+    logf = open(os.path.expanduser("~/tools/voice/switch.log"), "a")
+    subprocess.Popen(["zsh", sh, pid], stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
 
 
 async def report_phones(ws):
@@ -108,10 +127,11 @@ async def report_phones(ws):
     last_sig, since = None, 0
     while True:
         info = gather_phone_info()
-        sig = json.dumps(info, ensure_ascii=False, sort_keys=True)
+        reg = phone_registry()
+        sig = json.dumps([info, reg], ensure_ascii=False, sort_keys=True)
         if sig != last_sig or since >= 6:
             try:
-                await ws.send(json.dumps({"type": "phone_info", "phones": info}))
+                await ws.send(json.dumps({"type": "phone_info", "phones": info, "registry": reg}))
             except Exception:
                 return
             last_sig, since = sig, 0
@@ -435,6 +455,11 @@ async def run(token):
                 elif t == "sync":
                     write_cache(msg)
                     log(f"已同步缓存:联系人 {len(msg.get('contacts', []))},soul {len(msg.get('souls', []))}")
+                elif t == "switch_phone":
+                    pid = msg.get("phone_id")
+                    if pid:
+                        log(f"收到切换电话指令 → {pid}(即将重启各进程)")
+                        do_switch_phone(pid)
                 elif t == "channel_config":
                     if apply_channel_config(msg.get("channels", {})):
                         log(f"已应用渠道设置: {list(msg.get('channels', {}).keys())}")

@@ -73,14 +73,16 @@ async def _sync_bundle(device_id: str) -> dict:
         }
 
 
-async def _upsert_phones(device_id: str, phones: list):
-    """边缘端上报它控制的电话(状态+渠道),按 (device, pkey) upsert。"""
+async def _upsert_phones(device_id: str, phones: list, registry=None):
+    """边缘端上报它控制的电话(状态+渠道)+ 可切换电话清单,按 (device, pkey) upsert。"""
     from ..models import Phone
     from datetime import datetime, timezone
     async with SessionLocal() as db:
         d = await db.get(Device, device_id)
         if not d:
             return
+        if registry is not None:
+            d.phone_registry = registry
         for ph in phones or []:
             pkey = ph.get("pkey") or ph.get("udid") or ph.get("label") or "phone"
             p = (await db.execute(
@@ -202,7 +204,7 @@ async def edge_ws(ws: WebSocket, token: str = ""):
             elif kind == "call_memory":
                 await _save_memory(device_id, msg)
             elif kind == "phone_info":
-                await _upsert_phones(device_id, msg.get("phones", []))
+                await _upsert_phones(device_id, msg.get("phones", []), msg.get("registry"))
             elif kind == "status":
                 await _mark(device_id, True)
     except WebSocketDisconnect:

@@ -46,6 +46,7 @@ export const api = {
   listDevices: () => req("/devices", { auth: true }),
   renameDevice: (id, name) => req(`/devices/${id}`, { method: "PATCH", auth: true, body: { name } }),
   deleteDevice: (id) => req(`/devices/${id}`, { method: "DELETE", auth: true }),
+  switchPhone: (deviceId, phone_id) => req(`/devices/${deviceId}/switch-phone`, { method: "POST", auth: true, body: { phone_id } }),
   listPhones: () => req("/phones", { auth: true }),
   setPhoneAutoAnswer: (id, auto_answer) => req(`/phones/${id}`, { method: "PATCH", auth: true, body: { auto_answer } }),
   setPhoneChannel: (id, kind, patch) => req(`/phones/${id}/channel`, { method: "PATCH", auth: true, body: { kind, ...patch } }),

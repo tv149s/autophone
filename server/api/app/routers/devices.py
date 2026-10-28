@@ -7,6 +7,7 @@ from ..auth import new_device_token
 from ..db import get_db
 from ..deps import current_user
 from ..models import Device, User
+from ..ws_manager import hub
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -26,6 +27,7 @@ def _view(d: Device) -> dict:
     return {
         "id": d.id, "name": d.name, "kind": d.kind, "hostname": d.hostname,
         "online": d.online, "last_seen": d.last_seen, "created_at": d.created_at,
+        "phone_registry": d.phone_registry or [],
     }
 
 
@@ -65,6 +67,23 @@ async def register_self(body: RegisterIn, user: User = Depends(current_user), db
         dev.name = body.name
     await db.commit()
     return {**_view(dev), "token": dev.token}
+
+
+class SwitchPhoneIn(BaseModel):
+    phone_id: str
+
+
+@router.post("/{device_id}/switch-phone")
+async def switch_phone(device_id: str, body: SwitchPhoneIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    d = await db.get(Device, device_id)
+    if not d or d.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "设备不存在")
+    if not d.online:
+        raise HTTPException(status.HTTP_409_CONFLICT, "设备离线,无法切换")
+    ok = await hub.send(device_id, {"type": "switch_phone", "phone_id": body.phone_id})
+    if not ok:
+        raise HTTPException(status.HTTP_409_CONFLICT, "设备未连接")
+    return {"ok": True, "switching_to": body.phone_id}
 
 
 @router.post("/{device_id}/rotate-token")

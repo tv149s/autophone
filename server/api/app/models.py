@@ -43,6 +43,7 @@ class Device(Base):
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True, default=_uuid)
     online: Mapped[bool] = mapped_column(Boolean, default=False)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    phone_registry: Mapped[list] = mapped_column(JSON, default=list)   # 该边缘端可切换的电话清单
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

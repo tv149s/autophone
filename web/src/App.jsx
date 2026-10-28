@@ -437,6 +437,12 @@ function Devices() {
   const toggleAuto = async (p) => {
     try { await api.setPhoneAutoAnswer(p.id, !p.auto_answer); loadPhones(); } catch (x) { alert(x.message); }
   };
+  const switchPhone = async (d, ph) => {
+    if (ph.active) return;
+    if (!confirm(`把 ${d.name} 控制的电话切换到「${ph.label}」?\n会重启控制进程(WDA/callctl/duplex),新机需已连Wi-Fi并解锁。`)) return;
+    try { await api.switchPhone(d.id, ph.id); alert(`已下发切换到「${ph.label}」。切换+重启需约 30-60 秒,期间设备会短暂离线。`); }
+    catch (x) { alert(x.message); }
+  };
   const toggleChannel = async (p, c) => {
     try { await api.setPhoneChannel(p.id, c.kind, { enabled: !c.enabled }); loadPhones(); } catch (x) { alert(x.message); }
   };
@@ -462,22 +468,32 @@ function Devices() {
       {err && <div className="err">{err}</div>}
       <div className="card">
         <table>
-          <thead><tr><th>名称</th><th>类型</th><th>主机名</th><th>在线</th><th>最后在线</th><th></th></tr></thead>
+          <thead><tr><th>名称</th><th>类型</th><th>在线</th><th>受控电话(点击切换)</th><th></th></tr></thead>
           <tbody>
             {(devices || []).map((d) => (
               <tr key={d.id}>
-                <td>{d.name || <span className="muted">(未命名)</span>}</td>
+                <td>{d.name || <span className="muted">(未命名)</span>}<div className="mono muted" style={{ fontSize: 12 }}>{d.hostname || ""}</div></td>
                 <td className="mono">{d.kind}</td>
-                <td className="mono muted">{d.hostname || "—"}</td>
                 <td><span className={"pill " + (d.online ? "on" : "off")}>{d.online ? "在线" : "离线"}</span></td>
-                <td className="muted">{d.last_seen ? new Date(d.last_seen).toLocaleString() : "—"}</td>
+                <td>
+                  {(d.phone_registry || []).length === 0 ? <span className="muted">—</span> :
+                    <div className="row">
+                      {d.phone_registry.map((ph) => (
+                        <button key={ph.id} className={ph.active ? "" : "sec"} disabled={!d.online}
+                                title={ph.active ? "当前控制中" : "切换到此电话"}
+                                onClick={() => switchPhone(d, ph)}>
+                          {ph.label}{ph.active ? " ·当前" : ""}
+                        </button>
+                      ))}
+                    </div>}
+                </td>
                 <td className="row">
                   <button className="sec" onClick={() => rename(d)}>改名</button>
                   <button className="danger" onClick={() => del(d.id)}>移除</button>
                 </td>
               </tr>
             ))}
-            {devices && devices.length === 0 && <tr><td colSpan={6} className="muted">还没有设备。在设备上登录客户端即可自动接入。</td></tr>}
+            {devices && devices.length === 0 && <tr><td colSpan={5} className="muted">还没有设备。在设备上登录客户端即可自动接入。</td></tr>}
           </tbody>
         </table>
       </div>
