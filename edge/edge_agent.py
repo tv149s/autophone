@@ -41,8 +41,20 @@ MEM_REPORTED = f"{HERE}/.edge_mem_reported.json"
 CALLS = f"{HERE}/calls"
 CHANNELS_JSON = f"{HERE}/channels.json"
 CTL_STATUS = "http://127.0.0.1:8766/status"
-IPHONE_UDID = os.environ.get("EDGE_IPHONE_UDID", "00008110-000E61682EE2401E")
-IPHONE_NUMBER = os.environ.get("EDGE_IPHONE_NUMBER", "+14255480368")
+PHONES_JSON = os.path.expanduser("~/tools/phones.json")
+
+
+def active_phone():
+    """当前启用的受控电话(phones.json)。"""
+    try:
+        p = json.load(open(PHONES_JSON))
+        dev = p["active"]
+        c = p["phones"][dev]
+        return {"pkey": dev, "label": c.get("label", dev), "platform": c.get("platform", "ios"),
+                "udid": c.get("udid", ""), "number": c.get("number", "")}
+    except Exception:
+        return {"pkey": "iphone-13", "label": "iPhone 13", "platform": "ios",
+                "udid": "00008110-000E61682EE2401E", "number": "+14255480368"}
 
 
 WECHAT_BUNDLE = "com.tencent.xin"
@@ -76,9 +88,10 @@ def gather_phone_info() -> list:
     except Exception:
         pass
     front_label = {WECHAT_BUNDLE: "微信", "com.apple.springboard": "主屏幕"}.get(front_app, front_app or "")
+    ph = active_phone()
     return [{
-        "pkey": "iphone-13", "label": "iPhone 13", "platform": "ios",
-        "udid": IPHONE_UDID, "number": IPHONE_NUMBER,
+        "pkey": ph["pkey"], "label": ph["label"], "platform": ph["platform"],
+        "udid": ph["udid"], "number": ph["number"],
         "wda_ready": wda_ready, "locked": locked, "front_app": front_label, "channels": channels,
     }]
 
