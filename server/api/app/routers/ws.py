@@ -45,11 +45,12 @@ async def _push_pending(device_id: str):
 
 async def _sync_bundle(device_id: str) -> dict:
     """给边缘端下发:该用户的联系人(含绑定soul+最近记忆)+ 全部soul,供本地来电匹配与档案注入。"""
-    from ..models import Contact, ContactMemory, Soul
+    from ..models import Contact, ContactMemory, Soul, User
     async with SessionLocal() as db:
         d = await db.get(Device, device_id)
         if not d:
-            return {"contacts": [], "souls": []}
+            return {"contacts": [], "souls": [], "default_greeting": ""}
+        u = await db.get(User, d.user_id)
         contacts = (await db.execute(select(Contact).where(Contact.user_id == d.user_id))).scalars().all()
         souls = (await db.execute(select(Soul).where(Soul.user_id == d.user_id))).scalars().all()
         mems = (await db.execute(
@@ -68,6 +69,7 @@ async def _sync_bundle(device_id: str) -> dict:
                 "notes": c.notes, "org": c.org, "soul_id": c.soul_id, "memories": by_contact.get(c.id, []),
             } for c in contacts if c.phone or c.name],
             "souls": [{"id": s.id, "name": s.name, "body": s.body, "meta": s.meta or {}} for s in souls],
+            "default_greeting": (u.default_greeting if u else "") or "",
         }
 
 

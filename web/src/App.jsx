@@ -178,32 +178,52 @@ function useAsync(fn, deps = []) {
 function Souls() {
   const [souls, err, reload] = useAsync(() => api.listSouls());
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ name: "", body: "" });
+  const [form, setForm] = useState({ name: "", body: "", greeting: "", meta: {} });
   const [busy, setBusy] = useState(false);
+  const [dg, setDg] = useState("");
+  const [dgMsg, setDgMsg] = useState("");
+
+  useEffect(() => { api.getSettings().then((s) => setDg(s.default_greeting || "")).catch(() => {}); }, []);
+  const saveDg = async () => {
+    try { await api.updateSettings(dg); setDgMsg("已保存"); setTimeout(() => setDgMsg(""), 2500); } catch (x) { alert(x.message); }
+  };
 
   const save = async () => {
     setBusy(true);
     try {
-      if (editId) await api.updateSoul(editId, { ...form, meta: {} });
-      else await api.createSoul({ ...form, meta: {} });
-      setForm({ name: "", body: "" }); setEditId(null); reload();
+      const meta = { ...(form.meta || {}), greeting: form.greeting || "" };
+      if (editId) await api.updateSoul(editId, { name: form.name, body: form.body, meta });
+      else await api.createSoul({ name: form.name, body: form.body, meta });
+      setForm({ name: "", body: "", greeting: "", meta: {} }); setEditId(null); reload();
     } catch (x) { alert(x.message); } finally { setBusy(false); }
   };
-  const edit = (s) => { setEditId(s.id); setForm({ name: s.name, body: s.body }); window.scrollTo(0, 0); };
+  const edit = (s) => { setEditId(s.id); setForm({ name: s.name, body: s.body, greeting: (s.meta || {}).greeting || "", meta: s.meta || {} }); window.scrollTo(0, 0); };
   const del = async (id) => { if (!confirm("删除该身份?绑定它的联系人会回退到默认接线员。")) return; try { await api.deleteSoul(id); reload(); } catch (x) { alert(x.message); } };
 
   return (
     <div>
       <div className="card">
+        <h2>默认接听问候语(陌生来电)</h2>
+        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>接通后 AI 说的第一句。留空则用系统默认。改动会同步到设备,下一通生效。</p>
+        <textarea value={dg} onChange={(e) => setDg(e.target.value)}
+          placeholder="您好,我是张雷的 AI 助理,本通电话可能被录音,请问您是哪位、有什么事?" />
+        <div className="row" style={{ marginTop: 10 }}>
+          <button onClick={saveDg}>保存默认问候语</button>{dgMsg && <span style={{ color: "var(--ok)" }}>✓ {dgMsg}</span>}
+        </div>
+      </div>
+
+      <div className="card">
         <h2>{editId ? "编辑身份" : "新建身份(Soul)"}</h2>
         <label>名称</label>
         <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="如:法律顾问 / 餐厅客服 / 老友寒暄" />
+        <label>接通问候语(此身份接通后说的第一句;留空用默认)</label>
+        <input value={form.greeting} onChange={(e) => setForm({ ...form, greeting: e.target.value })} placeholder="如:王先生您好,我是张雷的助理,有什么可以帮您?" />
         <label>身份描述(决定语气、立场、职责;英文书写效果最好)</label>
         <textarea style={{ minHeight: 160 }} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })}
           placeholder="You are ... Be ... Handle ..." />
         <div className="row" style={{ marginTop: 14 }}>
           <button disabled={busy || !form.name} onClick={save}>{editId ? "保存" : "新建"}</button>
-          {editId && <button className="sec" onClick={() => { setEditId(null); setForm({ name: "", body: "" }); }}>取消</button>}
+          {editId && <button className="sec" onClick={() => { setEditId(null); setForm({ name: "", body: "", greeting: "", meta: {} }); }}>取消</button>}
         </div>
       </div>
       {err && <div className="err">{err}</div>}

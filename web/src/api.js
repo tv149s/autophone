@@ -50,6 +50,8 @@ export const api = {
   setPhoneAutoAnswer: (id, auto_answer) => req(`/phones/${id}`, { method: "PATCH", auth: true, body: { auto_answer } }),
   setPhoneChannel: (id, kind, patch) => req(`/phones/${id}/channel`, { method: "PATCH", auth: true, body: { kind, ...patch } }),
 
+  getSettings: () => req("/settings", { auth: true }),
+  updateSettings: (default_greeting) => req("/settings", { method: "PATCH", auth: true, body: { default_greeting } }),
   listSouls: () => req("/souls", { auth: true }),
   createSoul: (data) => req("/souls", { method: "POST", auth: true, body: data }),
   updateSoul: (id, data) => req(`/souls/${id}`, { method: "PATCH", auth: true, body: data }),

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .db import init_models
 from .routers import auth, contacts, devices, phones, souls, tasks, ws
+from .routers import settings as settings_router
 
 
 @asynccontextmanager
@@ -33,6 +34,7 @@ app.include_router(devices.router)
 app.include_router(phones.router)
 app.include_router(contacts.router)
 app.include_router(souls.router)
+app.include_router(settings_router.router)
 app.include_router(tasks.router)
 app.include_router(ws.router)
 

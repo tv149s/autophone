@@ -333,7 +333,8 @@ def write_cache(bundle: dict):
             by_phone[c["phone"]] = c
         if c.get("name"):
             by_name[c["name"].strip()] = c
-    json.dump({"by_phone": by_phone, "by_name": by_name, "souls": souls},
+    json.dump({"by_phone": by_phone, "by_name": by_name, "souls": souls,
+               "default_greeting": bundle.get("default_greeting", "")},
               open(CACHE, "w"), ensure_ascii=False, indent=2)
 
 
