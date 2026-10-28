@@ -147,6 +147,8 @@ function Auth({ onLogin }) {
 /* ---------------- 控制台 ---------------- */
 function Dashboard({ onLogout }) {
   const [tab, setTab] = useState("tasks");
+  const [memChannel, setMemChannel] = useState("");   // 跳到「记忆」页时预设的渠道筛选
+  const goMemories = (channel = "") => { setMemChannel(channel); setTab("memories"); };
   return (
     <div className="wrap">
       <div className="topbar">
@@ -158,11 +160,71 @@ function Dashboard({ onLogout }) {
         <button className={tab === "contacts" ? "active" : ""} onClick={() => setTab("contacts")}>通讯录</button>
         <button className={tab === "souls" ? "active" : ""} onClick={() => setTab("souls")}>身份</button>
         <button className={tab === "devices" ? "active" : ""} onClick={() => setTab("devices")}>设备</button>
+        <button className={tab === "memories" ? "active" : ""} onClick={() => setTab("memories")}>记忆</button>
       </div>
       {tab === "tasks" && <Tasks />}
       {tab === "contacts" && <Contacts />}
       {tab === "souls" && <Souls />}
-      {tab === "devices" && <Devices />}
+      {tab === "devices" && <Devices goMemories={goMemories} />}
+      {tab === "memories" && <Memories initChannel={memChannel} />}
+    </div>
+  );
+}
+
+const CHANNEL_LABELS = {
+  cellular: "蜂窝", whatsapp: "WhatsApp", telegram: "Telegram", wechat: "微信",
+  facetime: "FaceTime", signal: "Signal", messenger: "Messenger", qq: "QQ",
+  discord: "Discord", zoom: "Zoom", skype: "Skype", x: "X", google_voice: "Google Voice",
+};
+const chLabel = (c) => CHANNEL_LABELS[c] || c || "蜂窝";
+
+function Memories({ initChannel = "" }) {
+  const [channel, setChannel] = useState(initChannel);
+  const [q, setQ] = useState("");
+  const [items, setItems] = useState([]);
+  const [counts, setCounts] = useState({});
+  const [err, setErr] = useState("");
+  useEffect(() => { setChannel(initChannel); }, [initChannel]);
+  const load = async () => {
+    try { setItems(await api.listMemories(channel, q)); setErr(""); } catch (x) { setErr(x.message); }
+  };
+  useEffect(() => { api.memoryChannels().then(setCounts).catch(() => {}); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [channel]);
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const fmt = (t) => { try { return new Date(t).toLocaleString(); } catch { return t; } };
+  return (
+    <div>
+      <div className="spread"><h2>工作记忆</h2><button className="sec" onClick={load}>刷新</button></div>
+      <div className="card">
+        <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+          <button className={channel === "" ? "" : "sec"} onClick={() => setChannel("")}>全部 {total ? `(${total})` : ""}</button>
+          {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([c, n]) => (
+            <button key={c} className={channel === c ? "" : "sec"} onClick={() => setChannel(c)}>{chLabel(c)} ({n})</button>
+          ))}
+        </div>
+        <div className="row" style={{ marginTop: 8 }}>
+          <input placeholder="按名字搜索" value={q} onChange={(e) => setQ(e.target.value)}
+                 onKeyDown={(e) => e.key === "Enter" && load()} style={{ flex: 1 }} />
+          <button className="sec" onClick={load}>搜索</button>
+        </div>
+      </div>
+      {err && <div className="err">{err}</div>}
+      <div className="card">
+        {items.length === 0 ? <span className="muted">还没有通话记忆{channel ? `(${chLabel(channel)})` : ""}。接通的来电会自动在这里形成记忆。</span> :
+          <table>
+            <thead><tr><th>时间</th><th>渠道</th><th>联系人</th><th>记忆摘要</th></tr></thead>
+            <tbody>
+              {items.map((m) => (
+                <tr key={m.id}>
+                  <td className="mono muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{fmt(m.created_at)}</td>
+                  <td><span className="pill">{chLabel(m.channel)}</span></td>
+                  <td>{m.name || m.phone || "未知"}{m.phone && m.name !== m.phone && <div className="mono muted" style={{ fontSize: 12 }}>{m.phone}</div>}</td>
+                  <td>{m.summary}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>}
+      </div>
     </div>
   );
 }
@@ -422,7 +484,7 @@ function Contacts() {
   );
 }
 
-function Devices() {
+function Devices({ goMemories }) {
   const [devices, err, reload] = useAsync(() => api.listDevices());
   const [phones, setPhones] = useState([]);
   const loadPhones = () => api.listPhones().then(setPhones).catch(() => {});
@@ -533,7 +595,7 @@ function Devices() {
                         <button className="sec" onClick={() => toggleAuto(live)}>{live.auto_answer ? "自动接听:开" : "自动接听:关"}</button>
                       </div>
                       <table style={{ marginTop: 10 }}>
-                        <thead><tr><th>应用/渠道</th><th>可接听</th><th>可外呼</th><th>状态</th><th>启用</th></tr></thead>
+                        <thead><tr><th>应用/渠道</th><th>可接听</th><th>可外呼</th><th>状态</th><th>启用</th><th>记忆</th></tr></thead>
                         <tbody>
                           {(live.channels || []).map((c) => (
                             <tr key={c.kind}>
@@ -549,9 +611,13 @@ function Devices() {
                                   {c.enabled ? "已启用" : "已关闭"}
                                 </button>
                               </td>
+                              <td>
+                                <button className="sec" title="查看该渠道的通话记忆"
+                                        onClick={() => goMemories && goMemories(c.kind)}>记忆</button>
+                              </td>
                             </tr>
                           ))}
-                          {(live.channels || []).length === 0 && <tr><td colSpan={5} className="muted">无渠道信息</td></tr>}
+                          {(live.channels || []).length === 0 && <tr><td colSpan={6} className="muted">无渠道信息</td></tr>}
                         </tbody>
                       </table>
                     </>

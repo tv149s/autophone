@@ -101,6 +101,9 @@ export const api = {
   deleteContact: (id) => req(`/contacts/${id}`, { method: "DELETE", auth: true }),
   importContacts: (kind, text) => req("/contacts/import", { method: "POST", auth: true, body: { kind, text } }),
 
+  listMemories: (channel = "", q = "") => req(`/memories?channel=${encodeURIComponent(channel)}&q=${encodeURIComponent(q)}`, { auth: true }),
+  memoryChannels: () => req("/memories/channels", { auth: true }),
+
   listTasks: () => req("/tasks", { auth: true }),
   createTask: (device_id, card) =>
     req("/tasks", { method: "POST", auth: true, body: { device_id, card } }),
