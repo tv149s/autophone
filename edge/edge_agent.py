@@ -98,11 +98,16 @@ def gather_phone_info() -> list:
 
 
 def phone_registry():
-    """本边缘端可切换的电话清单(phones.json),供网页展示+切换。"""
+    """本边缘端可切换的电话清单(phones.json),供网页展示+切换。ready=WDA已编译,可切换。"""
     try:
         p = json.load(open(PHONES_JSON))
-        return [{"id": k, "label": v.get("label", k), "platform": v.get("platform", "ios"),
-                 "active": k == p.get("active")} for k, v in p.get("phones", {}).items()]
+        out = []
+        for k, v in p.get("phones", {}).items():
+            ready = v.get("platform", "ios") != "ios" or bool(
+                glob.glob(f"/Volumes/min-dev/wda-dd-{k}/Build/Products/*.xctestrun"))
+            out.append({"id": k, "label": v.get("label", k), "platform": v.get("platform", "ios"),
+                        "active": k == p.get("active"), "ready": ready})
+        return out
     except Exception:
         return []
 

@@ -479,10 +479,10 @@ function Devices() {
                   {(d.phone_registry || []).length === 0 ? <span className="muted">—</span> :
                     <div className="row">
                       {d.phone_registry.map((ph) => (
-                        <button key={ph.id} className={ph.active ? "" : "sec"} disabled={!d.online}
-                                title={ph.active ? "当前控制中" : "切换到此电话"}
+                        <button key={ph.id} className={ph.active ? "" : "sec"} disabled={!d.online || (!ph.active && ph.ready === false)}
+                                title={ph.active ? "当前控制中" : (ph.ready === false ? "该机未安装 WDA,不能切换" : "切换到此电话")}
                                 onClick={() => switchPhone(d, ph)}>
-                          {ph.label}{ph.active ? " ·当前" : ""}
+                          {ph.label}{ph.active ? " ·当前" : (ph.ready === false ? " (未装WDA)" : "")}
                         </button>
                       ))}
                     </div>}
