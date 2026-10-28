@@ -131,6 +131,7 @@ class Contact(Base):
     org: Mapped[str] = mapped_column(String(128), default="")
     soul_id: Mapped[str | None] = mapped_column(String(32), nullable=True)      # 该联系人指定的身份(可选)
     source: Mapped[str] = mapped_column(String(32), default="manual")           # manual/vcard/csv/google/android/call
+    policy: Mapped[str] = mapped_column(String(16), default="normal")           # normal=正常接听 / blocked=拉黑拒接不通知 / skip=不接但通知
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -142,6 +143,7 @@ class ContactMemory(Base):
     contact_id: Mapped[str] = mapped_column(ForeignKey("contacts.id", ondelete="CASCADE"), index=True)
     call_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     summary: Mapped[str] = mapped_column(Text, default="")        # 本次通话提炼的要点
+    source: Mapped[str] = mapped_column(String(48), default="")   # 本次是哪台受控电话接的(如 "三星 A14")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

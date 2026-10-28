@@ -212,16 +212,35 @@ function Memories({ initChannel = "" }) {
       <div className="card">
         {items.length === 0 ? <span className="muted">还没有通话记忆{channel ? `(${chLabel(channel)})` : ""}。接通的来电会自动在这里形成记忆。</span> :
           <table>
-            <thead><tr><th>时间</th><th>渠道</th><th>联系人</th><th>记忆摘要</th></tr></thead>
+            <thead><tr><th>时间</th><th>接听电话 · 渠道</th><th>联系人</th><th>记忆摘要</th><th>操作</th></tr></thead>
             <tbody>
-              {items.map((m) => (
-                <tr key={m.id}>
-                  <td className="mono muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{fmt(m.created_at)}</td>
-                  <td><span className="pill">{chLabel(m.channel)}</span></td>
-                  <td>{m.name || m.phone || "未知"}{m.phone && m.name !== m.phone && <div className="mono muted" style={{ fontSize: 12 }}>{m.phone}</div>}</td>
-                  <td>{m.summary}</td>
-                </tr>
-              ))}
+              {items.map((m) => {
+                const del = async () => { if (!confirm("删除这条记忆?")) return; try { await api.deleteMemory(m.id); load(); } catch (x) { alert(x.message); } };
+                const setPol = async (p) => {
+                  const label = { blocked: "拉黑(此人来电直接拒接、不通知)", skip: "跳过(此人来电不接、但通知你)", normal: "恢复正常接听" }[p];
+                  if (!confirm(`对「${m.name || m.phone}」:${label}?`)) return;
+                  try { await api.setContactPolicy(m.contact_id, p); load(); } catch (x) { alert(x.message); }
+                };
+                return (
+                  <tr key={m.id}>
+                    <td className="mono muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{fmt(m.created_at)}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>{m.source || "—"}<span className="muted"> · </span><span className="pill">{chLabel(m.channel)}</span></td>
+                    <td>
+                      {m.name || m.phone || "未知"}
+                      {m.phone && m.name !== m.phone && <div className="mono muted" style={{ fontSize: 12 }}>{m.phone}</div>}
+                      {m.policy === "blocked" && <span className="pill off" style={{ marginLeft: 4 }}>已拉黑</span>}
+                      {m.policy === "skip" && <span className="pill off" style={{ marginLeft: 4 }}>跳过</span>}
+                    </td>
+                    <td>{m.summary}</td>
+                    <td className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                      {m.policy !== "blocked" && <button className="sec" title="恶意来电:直接拒接不通知" onClick={() => setPol("blocked")}>拉黑</button>}
+                      {m.policy !== "skip" && <button className="sec" title="不接此人、但通知你" onClick={() => setPol("skip")}>跳过</button>}
+                      {m.policy !== "normal" && <button className="sec" title="恢复正常接听" onClick={() => setPol("normal")}>恢复</button>}
+                      <button className="danger" onClick={del}>删除</button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>}
       </div>

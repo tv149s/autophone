@@ -103,6 +103,8 @@ export const api = {
 
   listMemories: (channel = "", q = "") => req(`/memories?channel=${encodeURIComponent(channel)}&q=${encodeURIComponent(q)}`, { auth: true }),
   memoryChannels: () => req("/memories/channels", { auth: true }),
+  deleteMemory: (id) => req(`/memories/${id}`, { method: "DELETE", auth: true }),
+  setContactPolicy: (cid, policy) => req(`/contacts/${cid}/policy`, { method: "PATCH", auth: true, body: { policy } }),
 
   listTasks: () => req("/tasks", { auth: true }),
   createTask: (device_id, card) =>

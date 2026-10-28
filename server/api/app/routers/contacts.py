@@ -28,6 +28,7 @@ class ContactIn(BaseModel):
     org: str = ""
     tags: list[str] = []
     soul_id: str | None = None
+    policy: str | None = None
 
 
 class ImportIn(BaseModel):
@@ -40,7 +41,7 @@ def _view(c: Contact) -> dict:
         "id": c.id, "name": c.name, "phone": c.phone, "phone_raw": c.phone_raw, "channel": c.channel,
         "title": c.title, "relationship": c.relationship, "birthday": c.birthday,
         "age_range": c.age_range, "preferences": c.preferences, "notes": c.notes,
-        "org": c.org, "tags": c.tags or [], "soul_id": c.soul_id, "source": c.source,
+        "org": c.org, "tags": c.tags or [], "soul_id": c.soul_id, "source": c.source, "policy": c.policy or "normal",
         "updated_at": c.updated_at,
     }
 
@@ -114,11 +115,30 @@ async def update_contact(cid: str, body: ContactIn, user: User = Depends(current
     c = await db.get(Contact, cid)
     if not c or c.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "联系人不存在")
-    for k, v in body.model_dump(exclude={"phone"}).items():
+    for k, v in body.model_dump(exclude={"phone", "policy"}).items():
         setattr(c, k, v)
+    if body.policy in ("normal", "blocked", "skip"):
+        c.policy = body.policy
     if body.phone:
         c.phone = normalize(body.phone)
         c.phone_raw = body.phone
+    await db.commit()
+    return _view(c)
+
+
+class PolicyIn(BaseModel):
+    policy: str          # normal | blocked | skip
+
+
+@router.patch("/{cid}/policy")
+async def set_policy(cid: str, body: PolicyIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    """设置联系人来电策略:normal 正常 / blocked 拉黑拒接 / skip 不接但通知。"""
+    if body.policy not in ("normal", "blocked", "skip"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "policy 非法")
+    c = await db.get(Contact, cid)
+    if not c or c.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "联系人不存在")
+    c.policy = body.policy
     await db.commit()
     return _view(c)
 

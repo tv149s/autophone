@@ -66,7 +66,8 @@ async def _sync_bundle(device_id: str) -> dict:
             "contacts": [{
                 "phone": c.phone, "name": c.name, "channel": c.channel, "title": c.title,
                 "relationship": c.relationship, "birthday": c.birthday, "preferences": c.preferences,
-                "notes": c.notes, "org": c.org, "soul_id": c.soul_id, "memories": by_contact.get(c.id, []),
+                "notes": c.notes, "org": c.org, "soul_id": c.soul_id, "policy": c.policy or "normal",
+                "memories": by_contact.get(c.id, []),
             } for c in contacts if c.phone or c.name],
             "souls": [{"id": s.id, "name": s.name, "body": s.body, "meta": s.meta or {}} for s in souls],
             "default_greeting": (u.default_greeting if u else "") or "",
@@ -149,7 +150,8 @@ async def _save_memory(device_id: str, msg: dict):
             db.add(c)
             await db.flush()
         db.add(ContactMemory(user_id=d.user_id, contact_id=c.id,
-                             call_id=msg.get("call_id"), summary=summary))
+                             call_id=msg.get("call_id"), summary=summary,
+                             source=(msg.get("source") or "").strip()))
         await db.commit()
 
 

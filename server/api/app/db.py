@@ -20,11 +20,19 @@ async def init_models():
     # v1 用 create_all 建表;后续引入 Alembic 做迁移
     import asyncio
     from . import models  # noqa: F401
+    from sqlalchemy import text
+    # 已存在的表补新列(create_all 不会改旧表);幂等,新库也安全
+    add_cols = [
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS policy VARCHAR(16) DEFAULT 'normal'",
+        "ALTER TABLE contact_memories ADD COLUMN IF NOT EXISTS source VARCHAR(48) DEFAULT ''",
+    ]
     last = None
     for _ in range(30):            # 等 Postgres 就绪,最多约 30 秒
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                for sql in add_cols:
+                    await conn.execute(text(sql))
             return
         except Exception as e:     # 容器启动早于 db 接受连接时重试
             last = e

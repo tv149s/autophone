@@ -1,6 +1,6 @@
 """工作记忆汇总:把所有联系人的通话记忆按时间倒序拉平,支持按渠道/名字筛选。
 用于网页「记忆」页的时间流视图(单条点进可回到联系人)。"""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,9 +26,20 @@ async def list_memories(channel: str = "", q: str = "", limit: int = 200,
     rows = (await db.execute(stmt)).all()
     return [{
         "id": m.id, "contact_id": m.contact_id, "call_id": m.call_id,
-        "summary": m.summary, "created_at": m.created_at,
+        "summary": m.summary, "created_at": m.created_at, "source": m.source or "",
         "channel": c.channel or "cellular", "name": c.name, "phone": c.phone,
+        "policy": c.policy or "normal",
     } for m, c in rows]
+
+
+@router.delete("/{mid}")
+async def delete_memory(mid: str, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    m = await db.get(ContactMemory, mid)
+    if not m or m.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "记忆不存在")
+    await db.delete(m)
+    await db.commit()
+    return {"ok": True}
 
 
 @router.get("/channels")
