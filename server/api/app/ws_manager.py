@@ -52,3 +52,7 @@ class Hub:
 
 
 hub = Hub()
+
+# 人工接入会话的运行状态:device_id -> status(边缘端上报,网页轮询读)。
+# 进程内即可,和 hub 同生命周期(单实例够用)。
+manual_status: dict[str, dict] = {}

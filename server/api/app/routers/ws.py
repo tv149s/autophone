@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from ..db import SessionLocal
 from ..models import Device, Task
-from ..ws_manager import hub
+from ..ws_manager import hub, manual_status
 
 router = APIRouter()
 
@@ -214,6 +214,8 @@ async def edge_ws(ws: WebSocket, token: str = ""):
             await _save_memory(device_id, msg)
         elif kind == "phone_info":
             await _upsert_phones(device_id, msg.get("phones", []), msg.get("registry"))
+        elif kind == "manual_status":
+            manual_status[device_id] = msg.get("status") or {}
         elif kind == "status":
             await _mark(device_id, True)
 
