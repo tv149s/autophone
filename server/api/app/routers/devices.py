@@ -7,7 +7,7 @@ from ..auth import new_device_token
 from ..db import get_db
 from ..deps import current_user
 from ..models import Device, User
-from ..ws_manager import hub
+from ..ws_manager import hub, manual_status
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -104,6 +104,38 @@ async def set_monitor(device_id: str, body: SetMonitorIn, user: User = Depends(c
     if not ok:
         raise HTTPException(status.HTTP_409_CONFLICT, "设备未连接")
     return {"ok": True, "monitor": ids}
+
+
+class ManualSessionIn(BaseModel):
+    action: str                    # start / stop
+    mode: str = "listen"           # listen=纯聆听 / speak=可发言(后续阶段)
+    requirement: str = ""          # 用户填的"要求"(总结/纪要的指令)
+    soul: str = ""                 # 可选身份(soul 名)
+
+
+@router.post("/{device_id}/manual-session")
+async def manual_session(device_id: str, body: ManualSessionIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    """人工接入节点:手动音频会话。start 下发开始聆听,stop 结束并生成纪要。"""
+    d = await db.get(Device, device_id)
+    if not d or d.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "设备不存在")
+    if not d.online:
+        raise HTTPException(status.HTTP_409_CONFLICT, "设备离线,无法操作")
+    ok = await hub.send(device_id, {
+        "type": "manual_session", "action": body.action, "mode": body.mode,
+        "requirement": body.requirement, "soul": body.soul,
+    })
+    if not ok:
+        raise HTTPException(status.HTTP_409_CONFLICT, "设备未连接")
+    return {"ok": True, "action": body.action}
+
+
+@router.get("/{device_id}/manual-status")
+async def manual_status_get(device_id: str, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    d = await db.get(Device, device_id)
+    if not d or d.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "设备不存在")
+    return manual_status.get(device_id) or {"state": "idle"}
 
 
 @router.post("/{device_id}/rotate-token")

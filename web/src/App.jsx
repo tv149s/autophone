@@ -555,6 +555,7 @@ function Devices({ goMemories }) {
           在设备上登录客户端后,设备会<b style={{ color: "var(--text)" }}>自动出现</b>在这里并接入,无需手动创建。
         </p>
       </div>
+      <ManualSession devices={devices} />
       <div className="spread"><h2>我的设备</h2><button className="sec" onClick={reload}>刷新</button></div>
       {err && <div className="err">{err}</div>}
       <div className="card">
@@ -665,6 +666,108 @@ function Devices({ goMemories }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function ManualSession({ devices }) {
+  const online = (devices || []).filter((d) => d.online);
+  const [sel, setSel] = useState("");
+  const [souls, setSouls] = useState([]);
+  const [requirement, setRequirement] = useState("");
+  const [soul, setSoul] = useState("");
+  const [mode, setMode] = useState("listen");
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const dev = sel || (online[0] && online[0].id) || "";
+
+  useEffect(() => { api.listSouls().then(setSouls).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!dev) { setStatus(null); return; }
+    const poll = () => api.manualStatus(dev).then(setStatus).catch(() => {});
+    poll();
+    const t = setInterval(poll, 3000);
+    return () => clearInterval(t);
+  }, [dev]);
+
+  const st = status || {};
+  const running = st.state === "running" || st.state === "summarizing";
+  const fmtDur = (s) => (s ? `${Math.floor(s / 60)}分${s % 60}秒` : "0秒");
+
+  const start = async () => {
+    if (!dev) { alert("没有在线的控制设备。请先在 Mac 上登录客户端。"); return; }
+    setBusy(true);
+    try { await api.manualSession(dev, { action: "start", mode, requirement, soul }); }
+    catch (x) { alert(x.message); } finally { setBusy(false); }
+  };
+  const stop = async () => {
+    setBusy(true);
+    try { await api.manualSession(dev, { action: "stop" }); }
+    catch (x) { alert(x.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="card">
+      <div className="spread">
+        <h2>人工接入(手动音频会话)</h2>
+        <span className={"pill " + (running ? "on" : "off")}>
+          {st.state === "running" ? "聆听中" : st.state === "summarizing" ? "生成纪要中" : "空闲"}
+        </span>
+      </div>
+      <p className="muted" style={{ marginTop: 0 }}>
+        把会议 / Zoom / 播客等音源手动接入控制设备的混音口,AI 直接聆听转写、按「要求」生成纪要(完成后 iMessage 发你)。不依赖任何渠道;运行期间手机来电自动占线跳过。
+      </p>
+
+      {online.length > 1 && (
+        <div style={{ marginBottom: 10 }}>
+          <label>控制设备</label>
+          <select value={dev} onChange={(e) => setSel(e.target.value)}>
+            {online.map((d) => <option key={d.id} value={d.id}>{d.name || d.hostname || d.id}</option>)}
+          </select>
+        </div>
+      )}
+
+      <label>要求(留空则生成结构化纪要:议题 / 结论 / 待办 / 注意点)</label>
+      <textarea value={requirement} onChange={(e) => setRequirement(e.target.value)} disabled={running}
+        placeholder="例如:把这个会议的决定和待办整理出来,重点标注分给我的任务" />
+
+      <div className="row" style={{ marginTop: 10 }}>
+        <div style={{ flex: 1 }}>
+          <label>身份(可选)</label>
+          <select value={soul} onChange={(e) => setSoul(e.target.value)} disabled={running}>
+            <option value="">(默认)</option>
+            {souls.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: 1 }}>
+          <label>模式</label>
+          <select value={mode} onChange={(e) => setMode(e.target.value)} disabled={running}>
+            <option value="listen">纯聆听 + 总结</option>
+            <option value="speak" disabled>可发言(开发中)</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="row" style={{ marginTop: 14 }}>
+        {!running
+          ? <button disabled={busy || !dev} onClick={start}>启动聆听</button>
+          : <button className="danger" disabled={busy} onClick={stop}>停止并生成纪要</button>}
+      </div>
+
+      {running && (
+        <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
+          {st.state === "running"
+            ? `聆听中 · 已 ${fmtDur(st.elapsed)} · ${st.segments || 0} 段`
+            : "正在生成纪要,请稍候…"}
+        </div>
+      )}
+
+      {!running && st.summary_md && (
+        <div style={{ marginTop: 14 }}>
+          <label>最近一次纪要</label>
+          <pre className="token" style={{ whiteSpace: "pre-wrap", maxHeight: 360, overflow: "auto", fontSize: 13 }}>{st.summary_md}</pre>
+        </div>
+      )}
     </div>
   );
 }
