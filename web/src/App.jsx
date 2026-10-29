@@ -621,14 +621,14 @@ function Devices({ goMemories }) {
                     <>
                       <div className="row" style={{ marginTop: 8 }}>
                         <span className={"pill " + (live.wda_ready ? "on" : "off")}>{live.wda_ready ? "控制就绪" : "未就绪"}</span>
-                        <span className={"pill " + (live.locked ? "off" : "on")}>{live.locked ? "锁屏" : "亮屏"}</span>
+                        <span className={"pill " + (live.locked ? "off" : "on")}>{live.locked ? (ph.platform === "android" ? "熄屏" : "锁屏") : "亮屏"}</span>
                         {live.front_app && <span className="pill off">前台:{live.front_app}</span>}
                         <button className="sec" onClick={() => toggleAuto(live)}>{live.auto_answer ? "自动接听:开" : "自动接听:关"}</button>
                       </div>
                       <table style={{ marginTop: 10 }}>
                         <thead><tr><th>应用/渠道</th><th>可接听</th><th>可外呼</th><th>状态</th><th>启用</th><th>记忆</th></tr></thead>
                         <tbody>
-                          {(live.channels || []).map((c) => (
+                          {(live.channels || []).filter((c) => c.enabled).map((c) => (
                             <tr key={c.kind}>
                               <td>{c.name || c.kind}{c.warn && <div className="err" style={{ fontSize: 12, marginTop: 2 }}>⚠️ {c.warn}</div>}</td>
                               <td>{c.answer ? <span className="pill on">接听</span> : <span className="muted">—</span>}</td>
@@ -648,7 +648,7 @@ function Devices({ goMemories }) {
                               </td>
                             </tr>
                           ))}
-                          {(live.channels || []).length === 0 && <tr><td colSpan={6} className="muted">无渠道信息</td></tr>}
+                          {(live.channels || []).filter((c) => c.enabled).length === 0 && <tr><td colSpan={6} className="muted">暂无已开通渠道</td></tr>}
                         </tbody>
                       </table>
                     </>

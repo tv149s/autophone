@@ -1,5 +1,6 @@
 """边缘端 WSS 接入。边缘端带 device token 连上来(家里 NAT 后面主动连出),
 服务器下推任务、接收状态/结果上报。"""
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -197,32 +198,52 @@ async def edge_ws(ws: WebSocket, token: str = ""):
     await ws.accept()
     await hub.connect(device_id, ws)
     await _mark(device_id, True)
+
+    async def _handle(msg: dict):
+        kind = msg.get("type")
+        if kind == "ping":
+            await ws.send_json({"type": "pong"})
+        elif kind == "report":
+            await _apply_report(device_id, msg)
+        elif kind == "contacts_import":
+            res = await _import_contacts(device_id, msg.get("contacts", []))
+            await ws.send_json({"type": "contacts_import_done", **res})
+        elif kind == "sync_pull":
+            await ws.send_json({"type": "sync", **await _sync_bundle(device_id)})
+        elif kind == "call_memory":
+            await _save_memory(device_id, msg)
+        elif kind == "phone_info":
+            await _upsert_phones(device_id, msg.get("phones", []), msg.get("registry"))
+        elif kind == "status":
+            await _mark(device_id, True)
+
+    q = hub.outbox(device_id)
+    recv_fut = asyncio.ensure_future(ws.receive_json())
+    send_fut = asyncio.ensure_future(q.get())
     try:
         await ws.send_json({"type": "hello", "device_id": device_id})
-        await _push_pending(device_id)
+        await _push_pending(device_id)                       # 入队,下面统一发
+        # 单协程多路复用:收消息 与 发队列 都在本协程里 await send_json,
+        # 不能用子 task 发(新版 starlette/uvicorn 下非接收协程的 send 帧发不出去)。
         while True:
-            msg = await ws.receive_json()
-            kind = msg.get("type")
-            if kind == "ping":
-                await ws.send_json({"type": "pong"})
-            elif kind == "report":
-                await _apply_report(device_id, msg)
-            elif kind == "contacts_import":
-                res = await _import_contacts(device_id, msg.get("contacts", []))
-                await ws.send_json({"type": "contacts_import_done", **res})
-            elif kind == "sync_pull":
-                await ws.send_json({"type": "sync", **await _sync_bundle(device_id)})
-            elif kind == "call_memory":
-                await _save_memory(device_id, msg)
-            elif kind == "phone_info":
-                await _upsert_phones(device_id, msg.get("phones", []), msg.get("registry"))
-            elif kind == "status":
-                await _mark(device_id, True)
+            done, _ = await asyncio.wait(
+                {recv_fut, send_fut}, return_when=asyncio.FIRST_COMPLETED)
+            if send_fut in done:
+                message = send_fut.result()
+                await ws.send_json(message)
+                send_fut = asyncio.ensure_future(q.get())
+            if recv_fut in done:
+                msg = recv_fut.result()                      # 断开时在此抛 WebSocketDisconnect
+                recv_fut = asyncio.ensure_future(ws.receive_json())
+                await _handle(msg)
     except WebSocketDisconnect:
         pass
     except Exception:
         pass
     finally:
+        for f in (recv_fut, send_fut):
+            if not f.done():
+                f.cancel()
         # 只有当移除的是当前连接(未被更新的重连替换)才标离线,避免重连竞态
         if await hub.disconnect(device_id, ws):
             await _mark(device_id, False)
