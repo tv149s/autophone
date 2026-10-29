@@ -86,6 +86,26 @@ async def switch_phone(device_id: str, body: SwitchPhoneIn, user: User = Depends
     return {"ok": True, "switching_to": body.phone_id}
 
 
+class SetMonitorIn(BaseModel):
+    phones: list[str]          # 监控集合(最多 2 台);1 台=单机,2 台=双机监控
+
+
+@router.post("/{device_id}/set-monitor")
+async def set_monitor(device_id: str, body: SetMonitorIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    d = await db.get(Device, device_id)
+    if not d or d.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "设备不存在")
+    if not d.online:
+        raise HTTPException(status.HTTP_409_CONFLICT, "设备离线,无法设置")
+    ids = [p for p in body.phones if p][:2]
+    if not ids:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "至少选一台电话")
+    ok = await hub.send(device_id, {"type": "set_monitor", "phones": ids})
+    if not ok:
+        raise HTTPException(status.HTTP_409_CONFLICT, "设备未连接")
+    return {"ok": True, "monitor": ids}
+
+
 @router.post("/{device_id}/rotate-token")
 async def rotate_token(device_id: str, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
     d = await db.get(Device, device_id)

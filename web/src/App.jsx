@@ -518,10 +518,20 @@ function Devices({ goMemories }) {
   const toggleAuto = async (p) => {
     try { await api.setPhoneAutoAnswer(p.id, !p.auto_answer); loadPhones(); } catch (x) { alert(x.message); }
   };
-  const switchPhone = async (d, ph) => {
-    if (ph.active) return;
-    if (!confirm(`把 ${d.name} 控制的电话切换到「${ph.label}」?\n会重启控制进程(WDA/callctl/duplex),新机需已连Wi-Fi并解锁。`)) return;
-    try { await api.switchPhone(d.id, ph.id); alert(`已下发切换到「${ph.label}」。切换+重启需约 30-60 秒,期间设备会短暂离线。`); }
+  // 监控集合:默认单机(1台),加第 2 台进入双机监控(忙时占线跳过),最多 2 台、至少 1 台
+  const toggleMonitor = async (d, ph) => {
+    const cur = (d.phone_registry || []).filter((x) => x.monitored).map((x) => x.id);
+    let next;
+    if (ph.monitored) {
+      if (cur.length <= 1) { alert("至少保留一台监控电话。"); return; }
+      next = cur.filter((id) => id !== ph.id);
+    } else {
+      if (ph.ready === false) { alert("该机控制端未就绪,不能加入监控。"); return; }
+      if (cur.length >= 2) { alert("最多同时监控 2 台(双机)。请先停用一台再加。"); return; }
+      next = [...cur, ph.id];
+    }
+    if (!confirm(`把监控集合设为「${next.join(", ")}」?\n会重启控制进程(约 30-60 秒,设备短暂离线)。`)) return;
+    try { await api.setMonitor(d.id, next); alert(`已下发监控集合「${next.join(", ")}」。重启约 30-60 秒。`); }
     catch (x) { alert(x.message); }
   };
   const toggleChannel = async (p, c) => {
@@ -549,7 +559,7 @@ function Devices({ goMemories }) {
       {err && <div className="err">{err}</div>}
       <div className="card">
         <table>
-          <thead><tr><th>名称</th><th>类型</th><th>在线</th><th>当前电话</th><th></th></tr></thead>
+          <thead><tr><th>名称</th><th>类型</th><th>在线</th><th>监控中</th><th></th></tr></thead>
           <tbody>
             {(devices || []).map((d) => (
               <tr key={d.id}>
@@ -558,11 +568,11 @@ function Devices({ goMemories }) {
                 <td><span className={"pill " + (d.online ? "on" : "off")}>{d.online ? "在线" : "离线"}</span></td>
                 <td>
                   {(() => {
-                    const act = (d.phone_registry || []).find((ph) => ph.active);
-                    return act ? <span>{act.label} <span className="muted" style={{ fontSize: 12 }}>· {act.platform}</span></span>
-                                : <span className="muted">—</span>;
+                    const mon = (d.phone_registry || []).filter((ph) => ph.monitored);
+                    return mon.length ? <span>{mon.map((m) => m.label).join(" · ")}{mon.length > 1 && <span className="pill on" style={{ marginLeft: 6 }}>双机</span>}</span>
+                                      : <span className="muted">—</span>;
                   })()}
-                  <div className="mono muted" style={{ fontSize: 12 }}>切换见下方「电话」卡片</div>
+                  <div className="mono muted" style={{ fontSize: 12 }}>在下方卡片切换监控</div>
                 </td>
                 <td className="row">
                   <button className="sec" onClick={() => rename(d)}>改名</button>
@@ -584,28 +594,30 @@ function Devices({ goMemories }) {
             由 <b style={{ color: "var(--text)" }}>{d.name || "设备"}</b> 控制
             <span className={"pill " + (d.online ? "on" : "off")} style={{ marginLeft: 8 }}>{d.online ? "在线" : "离线"}</span>
           </div>
+          <div className="muted" style={{ fontSize: 12, margin: "0 0 6px" }}>
+            默认单机;给第 2 台点「加入监控」进入双机监控(同时监控两台,忙时只接一通、其余占线跳过并通知)。最多 2 台。
+          </div>
           <div className="row" style={{ flexWrap: "wrap", alignItems: "flex-start" }}>
             {d.phone_registry.map((ph) => {
-              const live = ph.active ? phones.find((p) => p.device_id === d.id && p.pkey === ph.id) : null;
+              const live = ph.monitored ? phones.find((p) => p.device_id === d.id && p.pkey === ph.id) : null;
               return (
                 <div className="card" key={ph.id}
-                     style={{ flex: ph.active ? "1 1 100%" : "0 1 240px",
-                              border: ph.active ? "2px solid var(--accent, #3a9d7a)" : undefined,
-                              opacity: ph.active ? 1 : 0.9 }}>
+                     style={{ flex: ph.monitored ? "1 1 100%" : "0 1 240px",
+                              border: ph.monitored ? "2px solid var(--accent, #3a9d7a)" : undefined,
+                              opacity: ph.monitored ? 1 : 0.9 }}>
                   <div className="spread">
                     <div>
                       <b>{ph.label}</b>
-                      {ph.active && <span className="pill on" style={{ marginLeft: 8 }}>当前控制</span>}
+                      {ph.monitored && <span className="pill on" style={{ marginLeft: 8 }}>监控中</span>}
                       <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{ph.number || ""} · {ph.platform}</div>
                     </div>
-                    {!ph.active &&
-                      <button className="sec" disabled={!d.online || ph.ready === false}
-                              title={ph.ready === false ? "该机控制端未就绪,不能切换" : "切换到此电话"}
-                              onClick={() => switchPhone(d, ph)}>
-                        {ph.ready === false ? "未就绪" : "切换到此机"}
-                      </button>}
+                    <button className="sec" disabled={!d.online || (!ph.monitored && ph.ready === false)}
+                            title={ph.ready === false ? "该机控制端未就绪" : (ph.monitored ? "停止监控此机" : "加入监控")}
+                            onClick={() => toggleMonitor(d, ph)}>
+                      {ph.monitored ? "停止监控" : (ph.ready === false ? "未就绪" : "加入监控")}
+                    </button>
                   </div>
-                  {ph.active && live && (
+                  {ph.monitored && live && (
                     <>
                       <div className="row" style={{ marginTop: 8 }}>
                         <span className={"pill " + (live.wda_ready ? "on" : "off")}>{live.wda_ready ? "控制就绪" : "未就绪"}</span>
@@ -641,11 +653,16 @@ function Devices({ goMemories }) {
                       </table>
                     </>
                   )}
-                  {ph.active && !live && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>正在获取实时状态…</div>}
+                  {ph.monitored && !live && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>正在获取实时状态…</div>}
                 </div>
               );
             })}
           </div>
+          {(d.phone_registry || []).filter((x) => x.monitored).length >= 2 && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              📵 双机监控:两台同时监控,忙时只接一通;另一通不接也不挂,只记「占线未接」并通知。音频经 QQFM 混音器合流到 Mac。
+            </div>
+          )}
         </div>
       ))}
     </div>
