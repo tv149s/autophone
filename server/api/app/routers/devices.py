@@ -111,6 +111,7 @@ class ManualSessionIn(BaseModel):
     mode: str = "listen"           # listen=纯聆听 / speak=可发言(后续阶段)
     requirement: str = ""          # 用户填的"要求"(总结/纪要的指令)
     soul: str = ""                 # 可选身份(soul 名)
+    text: str = ""                 # action=say 时要让 AI 说的话
 
 
 @router.post("/{device_id}/manual-session")
@@ -123,7 +124,7 @@ async def manual_session(device_id: str, body: ManualSessionIn, user: User = Dep
         raise HTTPException(status.HTTP_409_CONFLICT, "设备离线,无法操作")
     ok = await hub.send(device_id, {
         "type": "manual_session", "action": body.action, "mode": body.mode,
-        "requirement": body.requirement, "soul": body.soul,
+        "requirement": body.requirement, "soul": body.soul, "text": body.text,
     })
     if not ok:
         raise HTTPException(status.HTTP_409_CONFLICT, "设备未连接")

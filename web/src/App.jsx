@@ -679,6 +679,7 @@ function ManualSession({ devices }) {
   const [mode, setMode] = useState("listen");
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [sayText, setSayText] = useState("");
   const dev = sel || (online[0] && online[0].id) || "";
 
   useEffect(() => { api.listSouls().then(setSouls).catch(() => {}); }, []);
@@ -704,6 +705,11 @@ function ManualSession({ devices }) {
     setBusy(true);
     try { await api.manualSession(dev, { action: "stop" }); }
     catch (x) { alert(x.message); } finally { setBusy(false); }
+  };
+  const say = async () => {
+    if (!sayText.trim() || !dev) return;
+    try { await api.manualSession(dev, { action: "say", text: sayText }); setSayText(""); }
+    catch (x) { alert(x.message); }
   };
 
   return (
@@ -757,8 +763,16 @@ function ManualSession({ devices }) {
       {running && (
         <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
           {st.state === "running"
-            ? `聆听中 · 已 ${fmtDur(st.elapsed)} · ${st.segments || 0} 段`
+            ? `${st.speaking ? "发言中…" : "聆听中"} · 已 ${fmtDur(st.elapsed)} · ${st.segments || 0} 段`
             : "正在生成纪要,请稍候…"}
+        </div>
+      )}
+      {st.state === "running" && (
+        <div className="row" style={{ marginTop: 10 }}>
+          <input style={{ flex: 1 }} value={sayText} onChange={(e) => setSayText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && say()}
+            placeholder="输入一句话,让 AI 用你的音色替你说进会议" />
+          <button className="sec" onClick={say} disabled={!sayText.trim()}>发言</button>
         </div>
       )}
 
