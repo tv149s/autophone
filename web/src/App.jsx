@@ -749,7 +749,7 @@ function ManualSession({ devices }) {
           <label>模式</label>
           <select value={mode} onChange={(e) => setMode(e.target.value)} disabled={running}>
             <option value="listen">纯聆听 + 总结</option>
-            <option value="speak" disabled>可发言(开发中)</option>
+            <option value="speak">可发言(聆听 + 可按需发言)</option>
           </select>
         </div>
       </div>
@@ -767,7 +767,7 @@ function ManualSession({ devices }) {
             : "正在生成纪要,请稍候…"}
         </div>
       )}
-      {st.state === "running" && (
+      {st.state === "running" && st.mode === "speak" && (
         <div className="row" style={{ marginTop: 10 }}>
           <input style={{ flex: 1 }} value={sayText} onChange={(e) => setSayText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && say()}
